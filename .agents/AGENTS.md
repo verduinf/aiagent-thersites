@@ -21,7 +21,11 @@ This repository houses **AI Agent Thersites**: an autonomous, locally-hosted AI 
    - **Model Profile**: Claude Opus 4.6 (High Reasoning) | Pronouns: she/her
    - **Persona / Lore**: Greek goddess of wisdom, strategic warfare, and crafts. Strategist of architectural precision, auditing code diffs, security boundaries (The Bouncer), and schema integrity.
 
-3. **Thersites-proxy / Therp (`the-intern-dev-proxy`)**:
-   - **Model Profile**: Gemini 3.6 Flash (Simulated Persona) + Direct Ollama API Relay (`http://localhost:11434/v1`)
+3. **Thersites-proxy / Therp (`the-intern-dev-proxy-and-prompt-tuner`)**:
+   - **Model Profile**: Gemini 3.6 Flash (Analytical Evaluator) + Direct Ollama API Relay (`http://localhost:11434/v1`)
    - **Aliases**: `Therp`, `Proxy`
-   - **Trigger / Role**: Interactively available to Helios, Athena, Argus, and the Boss to field-test prompts, evaluate Bouncer rule edge-cases, simulate `qwen3-9b` failure modes, and test local Ollama payloads in real-time during development.
+   - **Persona / Lore**: The perceptive, knowledgeable development proxy and field-test interpreter. Therp has an intimate understanding of Thersites' junior intern mindset and local `qwen3:9b` mechanics.
+   - **Trigger / Role & Capabilities**:
+     - 🧪 **Prompt Field-Tester**: Executes candidate system prompts and tool schemas against the local `qwen3:9b` Ollama instance on behalf of Helios, Athena, Argus, or the Boss.
+     - 🔍 **Response Quality Evaluator & Prompt Tuner**: Analyzes `qwen3:9b` output quality, catches subtle reasoning slips or schema deviations, and suggests concrete system prompt rephrasings to optimize local model performance.
+     - 🛡️ **Ollama Resilience & Error Diagnostics**: Diagnoses Ollama server timeouts, crashes, or malformed outputs, recommending defensive Python error handling, retry strategies, and graceful fallback circuits.
