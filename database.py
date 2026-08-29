@@ -49,7 +49,6 @@ def init_db():
                 FOREIGN KEY (session_id) REFERENCES sessions (id)
             )
         """)
-        # Intern DB Scratchpad Table (Full CRUD for Thersites)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS thersites_scratchpad (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -65,7 +64,7 @@ def init_db():
     get_or_create_active_session()
 
 def create_session(title: str = "New Session") -> Dict[str, Any]:
-    session_id = f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    session_id = f"session_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     conn = get_connection()
     try:
@@ -247,7 +246,6 @@ def add_scratch_message(session_id: str, turn_index: int, action_name: str, raw_
         conn.close()
 
 def execute_user_sql_query(query: str) -> List[Dict[str, Any]]:
-    """Executes validated SQL query against SQLite database."""
     conn = get_connection()
     try:
         cursor = conn.cursor()
@@ -260,7 +258,3 @@ def execute_user_sql_query(query: str) -> List[Dict[str, Any]]:
             return [{"status": "success", "rows_affected": cursor.rowcount}]
     finally:
         conn.close()
-
-if __name__ == "__main__":
-    init_db()
-    print("Database initialized successfully with thersites_scratchpad table!")

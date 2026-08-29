@@ -2,13 +2,22 @@
 Argus Test Suite Guardian — AI Agent Thersites Test Suite
 Verifies SQLite storage, multi-session management, The Warden guardrail rules,
 JSON fuzzy extraction, SQL query safety, and Turn-1 telemetry.
+
+Uses isolated test database (tests/test_thersites.db) to prevent polluting production data.
 """
 import os
 import sys
 import unittest
 from pathlib import Path
 
+# Add project root to path
 sys.path.insert(0, str(Path("C:/Dev/aiagent-thersites").resolve()))
+
+import config
+
+# Override DB_PATH for isolated test suite execution
+TEST_DB_PATH = config.TESTS_DIR / "test_thersites.db"
+config.DB_PATH = TEST_DB_PATH
 
 from database import (
     init_db, create_session, get_recent_sessions, add_message,
@@ -23,8 +32,21 @@ class TestThersitesSuite(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        if TEST_DB_PATH.exists():
+            try:
+                TEST_DB_PATH.unlink()
+            except Exception:
+                pass
         init_db()
         cls.test_session = create_session("Argus Unit Test Session")
+
+    @classmethod
+    def tearDownClass(cls):
+        if TEST_DB_PATH.exists():
+            try:
+                TEST_DB_PATH.unlink()
+            except Exception:
+                pass
 
     def test_01_database_session_and_messages(self):
         session_id = self.test_session["id"]
@@ -54,11 +76,9 @@ class TestThersitesSuite(unittest.TestCase):
         self.assertEqual(res2["is_pinned"], 0)
 
     def test_03_warden_nu_nl_whitelist(self):
-        # Whitelisted URL nu.nl
         ok, msg, params = inspect_and_authorize("web_fetch", {"url": "https://nu.nl/tech"})
         self.assertTrue(ok)
         
-        # Unauthorized URL python.org
         ok, msg, params = inspect_and_authorize("web_fetch", {"url": "https://python.org"})
         self.assertFalse(ok)
         self.assertIn("Unauthorized domain", msg)
@@ -81,17 +101,14 @@ class TestThersitesSuite(unittest.TestCase):
         self.assertIn("Path sandbox violation", msg)
 
     def test_05_warden_sql_query_safety(self):
-        # SELECT on messages (Allowed)
         ok, msg, params = inspect_and_authorize("sqlite_query_executor", {"query": "SELECT * FROM messages LIMIT 5;"})
         self.assertTrue(ok)
         
-        # INSERT into thersites_scratchpad (Allowed)
         ok, msg, params = inspect_and_authorize("sqlite_query_executor", {
             "query": "INSERT INTO thersites_scratchpad (key, value, updated_at) VALUES ('task_1', 'done', '2026-08-29');"
         })
         self.assertTrue(ok)
         
-        # DELETE from messages (BLOCKED by The Warden!)
         ok, msg, params = inspect_and_authorize("sqlite_query_executor", {"query": "DELETE FROM messages WHERE id = 1;"})
         self.assertFalse(ok)
         self.assertIn("restricted strictly to table 'thersites_scratchpad'", msg)
