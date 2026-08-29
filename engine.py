@@ -87,7 +87,7 @@ def prewarm_ollama_model() -> bool:
     try:
         log_main(f"Pre-warming model '{MODEL_NAME}' in VRAM (keep_alive: {KEEP_AI_ALIVE}, num_ctx: {NUM_CTX})...", INDICATOR_THINKING)
         start_t = time.time()
-        resp = requests.post(native_url, json=payload, timeout=30)
+        resp = requests.post(native_url, json=payload, timeout=120)
         elapsed = round(time.time() - start_t, 2)
         if resp.status_code == 200:
             log_main(f"Model '{MODEL_NAME}' pre-warmed successfully in {elapsed}s!", INDICATOR_DONE)
@@ -118,7 +118,7 @@ def query_ollama(messages: List[Dict[str, str]], model: str = MODEL_NAME) -> Tup
     }
     
     try:
-        response = requests.post(native_url, headers=headers, json=payload, timeout=60)
+        response = requests.post(native_url, headers=headers, json=payload, timeout=120)
         wall_time = time.time() - start_t
         if response.status_code == 200:
             data = response.json()
@@ -142,15 +142,11 @@ def query_ollama(messages: List[Dict[str, str]], model: str = MODEL_NAME) -> Tup
             }
             log_performance(perf_metrics["tok_per_sec"], perf_metrics["latency_sec"], perf_metrics["eval_count"])
             return raw_content, perf_metrics
+        else:
+            raise RuntimeError(f"Ollama returned HTTP {response.status_code}: {response.text}")
     except Exception as e:
-        log_main(f"Ollama query warning ({e}). Using Therp simulation mode.", INDICATOR_BLOCKED)
-        
-    sim_content = json.dumps({
-        "thought": "Ollama local inference unavailable or starting up.",
-        "content": f"[Therp Proxy Note]: Local Ollama model '{model}' is currently offline. Simulated response.",
-        "actions": []
-    })
-    return sim_content, perf_metrics
+        log_main(f"Ollama connection error: {e}", INDICATOR_BLOCKED)
+        raise RuntimeError(f"Ollama connection error: {str(e)}")
 
 def run_subagent_summarizer(raw_text: str) -> str:
     log_subagent("HTML Summarizer", "Spawning secondary transient context...", INDICATOR_THINKING)
@@ -271,8 +267,22 @@ def run_agent_inner_loop(session_id: str, user_prompt: str) -> Generator[Dict[st
             "status": "thinking"
         }
         
-        raw_output, perf = query_ollama(llm_messages)
-        
+        try:
+            raw_output, perf = query_ollama(llm_messages)
+        except Exception as query_err:
+            log_main(f"Ollama Connection Error: {query_err}", INDICATOR_BLOCKED)
+            err_msg = f"[OLLAMA ERROR]: Local model 'qwen3.5:9b' is offline or unreachable ({str(query_err)})."
+            add_scratch_message(session_id, turn, "ollama_error", err_msg)
+            yield {
+                "type": "scratch_step",
+                "turn": turn,
+                "action": "ollama_error",
+                "status": "error",
+                "details": err_msg
+            }
+            final_response = err_msg
+            break
+            
         yield {
             "type": "performance",
             "tok_per_sec": perf["tok_per_sec"],
