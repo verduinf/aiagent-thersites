@@ -93,14 +93,13 @@ document.addEventListener("DOMContentLoaded", () => {
             card.style.fontSize = "0.8rem";
 
             const isUser = m.role === 'user';
-            const author = isUser ? "The Boss" : "Thersites";
 
             card.innerHTML = `
                 <div class="message-header" style="margin-bottom: 0.3rem;">
                     <div class="message-author" style="font-size: 0.75rem;">
-                        <span>?? Anchor (Msg #${m.sequence_id})</span>
+                        <span>\U0001F4CD Anchor (Msg #${m.sequence_id})</span>
                     </div>
-                    <button class="pin-btn pinned" data-msg-id="${m.id}" title="Unpin Anchor">??</button>
+                    <button class="pin-btn pinned" data-msg-id="${m.id}" title="Unpin Anchor">\U0001F4CD</button>
                 </div>
                 <div class="message-body" style="font-size: 0.8rem; line-height: 1.3;">${escapeHtml(m.content)}</div>
             `;
@@ -138,18 +137,18 @@ document.addEventListener("DOMContentLoaded", () => {
             
             const isUser = m.role === 'user';
             const author = isUser ? "The Boss" : "Thersites (Intern)";
-            const avatarIcon = isUser ? "??" : "??";
+            const avatarIcon = isUser ? "\U0001F464" : "\U0001F4DC";
             
             const isPinned = m.is_pinned === 1;
             const pinClass = isPinned ? "pinned" : "";
             
             let statusTagHtml = "";
             if (isPinned) {
-                statusTagHtml = `<span class="context-badge pinned" title="Pinned Anchor in System Contract">?? Pinned Anchor</span>`;
+                statusTagHtml = `<span class="context-badge pinned" title="Pinned Anchor in System Contract">\U0001F4CD Pinned Anchor</span>`;
                 pinnedCharCount += m.content.length;
                 pinnedMessages.push(m);
             } else {
-                statusTagHtml = `<span class="context-badge in-rolling" title="Active 20k Rolling Buffer">?? In 20k Window</span>`;
+                statusTagHtml = `<span class="context-badge in-rolling" title="Active 20k Rolling Buffer">\U0001F7E2 In 20k Window</span>`;
                 rollingCharCount += m.content.length;
             }
 
@@ -163,7 +162,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     <div class="message-actions">
                         <span class="seq-badge">Msg #${m.sequence_id}</span>
                         <span class="message-time">${m.created_at || ''}</span>
-                        <button class="pin-btn ${pinClass}" data-msg-id="${m.id}" title="Toggle Pin">??</button>
+                        <button class="pin-btn ${pinClass}" data-msg-id="${m.id}" title="Toggle Pin">\U0001F4CD</button>
                     </div>
                 </div>
                 <div class="message-body">${escapeHtml(m.content)}</div>
@@ -225,7 +224,7 @@ document.addEventListener("DOMContentLoaded", () => {
         // Show thought container and auto-expand on new prompt
         scratchpadAccordion.classList.add("visible");
         scratchpadAccordion.classList.remove("collapsed");
-        accordionHeader.innerHTML = `<span class="accordion-title">?? Intern is thinking... (Turn 1/8)</span><span class="accordion-icon">?</span>`;
+        accordionHeader.innerHTML = `<span class="accordion-title">\U0001F7E1 Intern is thinking... (Turn 1/8)</span><span class="accordion-icon">\u25B2</span>`;
         accordionBody.innerHTML = `<div class="accordion-step"><span class="step-icon">??</span> Connecting to Ollama model...</div>`;
 
         let lastTurn = 1;
@@ -240,7 +239,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     lastTurn = data.turn;
                     const isCollapsed = scratchpadAccordion.classList.contains("collapsed");
                     const icon = isCollapsed ? "?" : "?";
-                    accordionHeader.innerHTML = `<span class="accordion-title">?? Intern is thinking... (Turn ${data.turn}/${data.max_turns})</span><span class="accordion-icon">${icon}</span>`;
+                    accordionHeader.innerHTML = `<span class="accordion-title">\U0001F7E1 Intern is thinking... (Turn ${data.turn}/${data.max_turns})</span><span class="accordion-icon">${icon}</span>`;
                 } else if (data.type === "performance") {
                     if (perfTag) {
                         perfTag.textContent = `? ${data.tok_per_sec} tok/s (${data.latency_sec}s)`;
@@ -265,7 +264,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     sendBtn.disabled = false;
                     const isCollapsed = scratchpadAccordion.classList.contains("collapsed");
                     const icon = isCollapsed ? "?" : "?";
-                    accordionHeader.innerHTML = `<span class="accordion-title">?? Intern task complete! (${lastTurn} turn${lastTurn > 1 ? 's' : ''})</span><span class="accordion-icon">${icon}</span>`;
+                    accordionHeader.innerHTML = `<span class="accordion-title">\U0001F7E2 Intern task complete! (${lastTurn} turn${lastTurn > 1 ? 's' : ''})</span><span class="accordion-icon">${icon}</span>`;
                     loadMessages(currentSessionId);
                 }
             };
@@ -276,7 +275,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 sendBtn.disabled = false;
                 const isCollapsed = scratchpadAccordion.classList.contains("collapsed");
                 const icon = isCollapsed ? "?" : "?";
-                accordionHeader.innerHTML = `<span class="accordion-title">?? Task completed with error</span><span class="accordion-icon">${icon}</span>`;
+                accordionHeader.innerHTML = `<span class="accordion-title">\U0001F534 Task completed with error</span><span class="accordion-icon">${icon}</span>`;
             };
 
         } catch (err) {
