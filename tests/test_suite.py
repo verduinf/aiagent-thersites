@@ -8,7 +8,6 @@ import sys
 import unittest
 from pathlib import Path
 
-# Add project root to path
 sys.path.insert(0, str(Path("C:/Dev/aiagent-thersites").resolve()))
 
 from database import (
@@ -18,6 +17,7 @@ from database import (
 )
 from bouncer import inspect_and_authorize, BouncerViolation, validate_url, validate_write_path
 from engine import extract_fuzzy_json, run_subagent_summarizer
+from config import SANDBOX_DIR
 
 class TestThersitesSuite(unittest.TestCase):
 
@@ -44,32 +44,41 @@ class TestThersitesSuite(unittest.TestCase):
         msg = add_message(session_id, "user", "Crucial requirement: Always output JSON.")
         msg_id = msg["id"]
         
-        # Toggle pin on
         res = toggle_message_pin(msg_id)
         self.assertEqual(res["is_pinned"], 1)
         
         pinned = get_pinned_messages(session_id)
         self.assertTrue(any(p["id"] == msg_id for p in pinned))
         
-        # Toggle pin off
         res2 = toggle_message_pin(msg_id)
         self.assertEqual(res2["is_pinned"], 0)
 
-    def test_03_bouncer_whitelists(self):
-        # Whitelisted URL
-        ok, msg, params = inspect_and_authorize("web_fetch", {"url": "https://python.org"})
+    def test_03_bouncer_nu_nl_whitelist(self):
+        # Whitelisted URL nu.nl
+        ok, msg, params = inspect_and_authorize("web_fetch", {"url": "https://nu.nl/tech"})
         self.assertTrue(ok)
         
-        # Unauthorized URL
-        ok, msg, params = inspect_and_authorize("web_fetch", {"url": "https://unauthorized-domain.com"})
+        # Unauthorized URL python.org (under new single-domain policy)
+        ok, msg, params = inspect_and_authorize("web_fetch", {"url": "https://python.org"})
         self.assertFalse(ok)
         self.assertIn("Unauthorized domain", msg)
 
-    def test_04_bouncer_path_sandbox(self):
-        sandbox_path = "C:/Dev/aiagent-thersites/sandbox/test.txt"
-        ok, msg, params = inspect_and_authorize("write_to_file", {"filepath": sandbox_path})
+    def test_04_bouncer_sandbox_crud(self):
+        sandbox_file = str(SANDBOX_DIR / "intern_test.txt")
+        
+        # Write
+        ok, msg, params = inspect_and_authorize("write_to_file", {"filepath": sandbox_file})
         self.assertTrue(ok)
         
+        # Read
+        ok, msg, params = inspect_and_authorize("read_file", {"filepath": sandbox_file})
+        self.assertTrue(ok)
+        
+        # Delete
+        ok, msg, params = inspect_and_authorize("delete_file", {"filepath": sandbox_file})
+        self.assertTrue(ok)
+        
+        # Sandbox Violation
         system_path = "C:/Windows/System32/hacked.dll"
         ok, msg, params = inspect_and_authorize("write_to_file", {"filepath": system_path})
         self.assertFalse(ok)

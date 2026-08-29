@@ -44,7 +44,6 @@ def validate_scratchpad_path(target_path_str: str) -> Path:
     resolved = Path(target_path_str).resolve()
     expected = SCRATCHPAD_PATH.resolve()
     if resolved != expected:
-        # Override target to exact scratchpad path
         log_bouncer("write_to_scratchpad", f"Overriding path '{target_path_str}' -> '{expected.name}'", is_allowed=True)
     return expected
 
@@ -62,12 +61,19 @@ def inspect_and_authorize(tool_name: str, params: Dict[str, Any]) -> Tuple[bool,
             log_bouncer("web_fetch", f"Domain '{urlparse(url).hostname}' authorized by Bouncer.", is_allowed=True)
             return True, "URL authorized", sanitized
             
-        elif tool_name == "write_to_file":
+        elif tool_name in ("write_to_file", "read_file", "delete_file"):
             filepath = params.get("filepath", "")
             validated_path = validate_write_path(filepath)
             sanitized["filepath"] = str(validated_path)
-            log_bouncer("write_to_file", f"Path '{validated_path.name}' within sandbox enclosure.", is_allowed=True)
-            return True, "Path authorized", sanitized
+            log_bouncer(tool_name, f"Path '{validated_path.name}' within sandbox enclosure.", is_allowed=True)
+            return True, "Sandbox path authorized", sanitized
+            
+        elif tool_name == "list_sandbox":
+            dirpath = params.get("dirpath", str(SANDBOX_DIR))
+            validated_path = validate_write_path(dirpath)
+            sanitized["dirpath"] = str(validated_path)
+            log_bouncer("list_sandbox", f"Listing authorized inside '{validated_path.name}'", is_allowed=True)
+            return True, "Sandbox dir authorized", sanitized
             
         elif tool_name == "write_to_scratchpad":
             filepath = params.get("filepath", "scratchpad.md")
@@ -87,17 +93,3 @@ def inspect_and_authorize(tool_name: str, params: Dict[str, Any]) -> Tuple[bool,
         msg = str(e)
         log_bouncer(tool_name, msg, is_allowed=False)
         return False, msg, params
-
-if __name__ == "__main__":
-    print("Testing Bouncer Guardrails...")
-    ok, msg, p = inspect_and_authorize("web_fetch", {"url": "https://python.org/downloads"})
-    print("Test 1 (Whitelisted URL):", ok, msg)
-    
-    ok, msg, p = inspect_and_authorize("web_fetch", {"url": "https://malicious-site.com/hacked"})
-    print("Test 2 (Unauthorized URL):", ok, msg)
-    
-    ok, msg, p = inspect_and_authorize("write_to_file", {"filepath": str(SANDBOX_DIR / "test.txt")})
-    print("Test 3 (Sandbox File):", ok, msg)
-    
-    ok, msg, p = inspect_and_authorize("write_to_file", {"filepath": "C:/Windows/System32/hacked.dll"})
-    print("Test 4 (Sandbox Violation):", ok, msg)

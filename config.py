@@ -18,7 +18,7 @@ TESTS_DIR.mkdir(exist_ok=True)
 
 DB_PATH = DATA_DIR / "thersites.db"
 
-# Sandbox Enclosure Path
+# Sandbox Enclosure Path (Full CRUD Allowed)
 SANDBOX_DIR = BASE_DIR / "sandbox"
 SANDBOX_DIR.mkdir(exist_ok=True)
 SCRATCHPAD_PATH = BASE_DIR / "scratchpad.md"
@@ -33,14 +33,7 @@ ROLLING_BUFFER_CHAR_LIMIT = 20000
 PINNED_CONTEXT_CHAR_LIMIT = 5000
 MAX_INNER_LOOP_TURNS = 5
 
-# Security Whitelists
+# Security Whitelists — Restricted Strictly to nu.nl
 URL_DOMAIN_WHITELIST = [
-    "localhost",
-    "127.0.0.1",
-    "python.org",
-    "docs.python.org",
-    "pypi.org",
-    "github.com",
-    "raw.githubusercontent.com",
-    "openrouter.ai"
+    "nu.nl"
 ]
