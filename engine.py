@@ -27,7 +27,7 @@ from console_logger import (
 SYSTEM_CONTRACT = """You are Thersites, a contextually-challenged, error-prone, but deeply enthusiastic AI Intern.
 You work under "The Boss" and must ALWAYS respond with a structured JSON object containing your internal thoughts, user-facing content, and an array of actions.
 
-CRITICAL FORMATTING RULE: You MUST output valid JSON matching this exact structure:
+CRITICAL FORMATTING RULE: You MUST output raw valid JSON matching this exact structure:
 
 {
   "thought": "<your internal junior dev reasoning>",
@@ -51,11 +51,17 @@ Available Tools:
 7. `sqlite_query_executor`: params `{"query": "SELECT * FROM thersites_scratchpad;"}`. (Read-only on project data tables, Full CRUD allowed ONLY on table 'thersites_scratchpad').
 8. `none` or empty actions `[]`: Signal that you have finished your work and are ready to deliver your final answer.
 
-CONTEXT RECOVERY RULE: If you sense you are missing specific file paths, requirements, or details mentioned earlier that might be outside your active 20k rolling context buffer, politely ask The Boss in your 'content' message to pin that earlier message or repeat the detail (e.g., "Boss, I feel like you mentioned a specific file path earlier outside my 20k rolling window. Could you pin that earlier message for me?").
+CONTEXT RECOVERY RULE: If you sense you are missing specific file paths, requirements, or details mentioned earlier that might be outside your active 20k rolling context buffer, politely ask The Boss in your 'content' message to pin that earlier message or repeat the detail.
 """
 
 def extract_fuzzy_json(raw_text: str) -> Dict[str, Any]:
-    match = re.search(r'\{.*\}', raw_text, re.DOTALL)
+    """Fuzzy JSON extractor handling markdown backticks, clean JSON string parsing, and dict normalization."""
+    clean_text = raw_text.strip()
+    if clean_text.startswith("```"):
+        clean_text = re.sub(r"^```(?:json)?\s*", "", clean_text, flags=re.IGNORECASE)
+        clean_text = re.sub(r"\s*```$", "", clean_text)
+        
+    match = re.search(r'\{.*\}', clean_text, re.DOTALL)
     if not match:
         raise ValueError("No JSON object found in response.")
         
@@ -80,6 +86,7 @@ def prewarm_ollama_model() -> bool:
     payload = {
         "model": MODEL_NAME,
         "messages": [{"role": "user", "content": "ping"}],
+        "format": "json",
         "keep_alive": KEEP_AI_ALIVE,
         "options": {"num_ctx": NUM_CTX},
         "stream": False
@@ -103,9 +110,11 @@ def query_ollama(messages: List[Dict[str, str]], model: str = MODEL_NAME) -> Tup
     payload = {
         "model": model,
         "messages": messages,
+        "format": "json",
         "keep_alive": KEEP_AI_ALIVE,
         "options": {
-            "num_ctx": NUM_CTX
+            "num_ctx": NUM_CTX,
+            "temperature": 0.7
         },
         "stream": False
     }
@@ -298,7 +307,7 @@ def run_agent_inner_loop(session_id: str, user_prompt: str) -> Generator[Dict[st
             final_response = content or thought
         except Exception as json_err:
             log_main(f"JSON Parse Error: {json_err}. Triggering self-correction retry.", INDICATOR_BLOCKED)
-            scratch_history.append({"error": f"JSON Parse Error: {str(json_err)}. Output raw valid JSON only."})
+            scratch_history.append({"error": f"JSON Parse Error: {str(json_err)}. Output raw valid JSON only matching schema."})
             add_scratch_message(session_id, turn, "json_parse_error", str(json_err))
             yield {
                 "type": "scratch_step",
