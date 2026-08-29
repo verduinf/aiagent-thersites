@@ -181,8 +181,11 @@
         promptInput.value = "";
         sendBtn.disabled = true;
         
+        accordionHeader.innerHTML = `<span class="accordion-title">🟡 Intern is thinking... (Turn 1/5)</span><span class="accordion-icon">▼</span>`;
         accordionBody.innerHTML = `<div class="accordion-step"><span class="step-icon">🟡</span> Connecting to Ollama model...</div>`;
         accordionBody.parentElement.classList.add("active");
+
+        let lastTurn = 1;
 
         try {
             const eventSource = new EventSource(`/api/chat/stream?session_id=${currentSessionId}&prompt=${encodeURIComponent(prompt)}`);
@@ -191,7 +194,8 @@
                 const data = JSON.parse(event.data);
 
                 if (data.type === "telemetry") {
-                    // Handled live
+                    lastTurn = data.turn;
+                    accordionHeader.innerHTML = `<span class="accordion-title">🟡 Intern is thinking... (Turn ${data.turn}/${data.max_turns})</span><span class="accordion-icon">▼</span>`;
                 } else if (data.type === "performance") {
                     if (perfTag) {
                         perfTag.textContent = `⚡ ${data.tok_per_sec} tok/s (${data.latency_sec}s)`;
@@ -213,6 +217,8 @@
                 } else if (data.type === "final_response") {
                     eventSource.close();
                     sendBtn.disabled = false;
+                    accordionHeader.innerHTML = `<span class="accordion-title">🟢 Intern task complete! (${lastTurn} turn${lastTurn > 1 ? 's' : ''})</span><span class="accordion-icon">▼</span>`;
+                    accordionBody.parentElement.classList.remove("active");
                     loadMessages(currentSessionId);
                 }
             };
@@ -221,6 +227,7 @@
                 console.error("SSE Error:", err);
                 eventSource.close();
                 sendBtn.disabled = false;
+                accordionHeader.innerHTML = `<span class="accordion-title">🔴 Task completed with error</span><span class="accordion-icon">▼</span>`;
             };
 
         } catch (err) {
