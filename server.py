@@ -125,9 +125,7 @@ async def stream_chat(prompt: str, session_id: Optional[str] = None):
     async def event_generator():
         generator = run_agent_inner_loop(session_id, prompt)
         for chunk in generator:
-            yield f"data: {json.dumps(chunk)}
-
-"
+            yield f"data: {json.dumps(chunk)}\n\n"
             await asyncio.sleep(0.01)
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
