@@ -90,13 +90,13 @@ def prewarm_ollama_model() -> bool:
         "messages": [],
         "keep_alive": KEEP_AI_ALIVE,
         "options": {
-            "num_ctx": NUM_CTX,
+            "num_ctx": 2048,
             "num_thread": 8
         },
         "stream": False
     }
     try:
-        log_main(f"Pre-warming model '{MODEL_NAME}' in VRAM (keep_alive: {KEEP_AI_ALIVE}, num_ctx: {NUM_CTX})...", INDICATOR_THINKING)
+        log_main(f"Pre-warming model '{MODEL_NAME}' in VRAM (keep_alive: {KEEP_AI_ALIVE}, num_ctx: 2048)...", INDICATOR_THINKING)
         start_t = time.time()
         resp = requests.post(native_url, json=payload, timeout=60)
         elapsed = round(time.time() - start_t, 2)
@@ -111,12 +111,16 @@ def query_ollama(messages: List[Dict[str, str]], model: str = MODEL_NAME) -> Tup
     base = OLLAMA_BASE_URL.rstrip('/')
     native_url = f"{base}/api/chat"
     headers = {"Content-Type": "application/json"}
+    
+    total_chars = sum(len(m.get("content", "")) for m in messages)
+    dynamic_num_ctx = 2048 if total_chars < 5000 else 4096
+    
     payload = {
         "model": model,
         "messages": messages,
         "keep_alive": KEEP_AI_ALIVE,
         "options": {
-            "num_ctx": NUM_CTX,
+            "num_ctx": dynamic_num_ctx,
             "num_thread": 8,
             "temperature": 0.7
         },
@@ -127,7 +131,8 @@ def query_ollama(messages: List[Dict[str, str]], model: str = MODEL_NAME) -> Tup
     perf_metrics = {
         "tok_per_sec": 0.0,
         "latency_sec": 0.0,
-        "eval_count": 0
+        "eval_count": 0,
+        "dynamic_num_ctx": dynamic_num_ctx
     }
     
     try:
@@ -151,7 +156,8 @@ def query_ollama(messages: List[Dict[str, str]], model: str = MODEL_NAME) -> Tup
             perf_metrics = {
                 "tok_per_sec": round(tok_per_sec, 1),
                 "latency_sec": round(latency_sec, 2),
-                "eval_count": eval_count
+                "eval_count": eval_count,
+                "dynamic_num_ctx": dynamic_num_ctx
             }
             log_performance(perf_metrics["tok_per_sec"], perf_metrics["latency_sec"], perf_metrics["eval_count"])
             return raw_content, perf_metrics
