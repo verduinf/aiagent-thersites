@@ -89,7 +89,10 @@ def prewarm_ollama_model() -> bool:
         "model": MODEL_NAME,
         "messages": [],
         "keep_alive": KEEP_AI_ALIVE,
-        "options": {"num_ctx": NUM_CTX},
+        "options": {
+            "num_ctx": NUM_CTX,
+            "num_thread": 8
+        },
         "stream": False
     }
     try:
@@ -114,6 +117,7 @@ def query_ollama(messages: List[Dict[str, str]], model: str = MODEL_NAME) -> Tup
         "keep_alive": KEEP_AI_ALIVE,
         "options": {
             "num_ctx": NUM_CTX,
+            "num_thread": 8,
             "temperature": 0.7
         },
         "stream": False
