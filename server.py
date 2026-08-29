@@ -1,134 +1,112 @@
 ﻿"""
-FastAPI Server for AI Agent Thersites
-Provides REST & SSE Streaming API endpoints and serves the clean dark-mode Web UI.
+FastAPI Server & SSE API Endpoints for AI Agent Thersites
+Provides session routing, timeline queries, pin management, and streaming inner-loop responses.
 """
 import os
 import json
 import asyncio
-import subprocess
-from pathlib import Path
-from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Body
-from fastapi.staticfiles import StaticFiles
+from typing import Optional, Dict, Any, List
+from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from config import STATIC_DIR, ROLLING_BUFFER_CHAR_LIMIT, PINNED_CONTEXT_CHAR_LIMIT, MODEL_NAME, KEEP_AI_ALIVE, NUM_CTX
+from config import STATIC_DIR, MODEL_NAME
 from database import (
-    init_db, cleanup_test_data, get_or_create_active_session, get_recent_sessions,
-    create_session, set_active_session, get_all_messages,
-    get_pinned_messages, get_rolling_messages, toggle_message_pin
+    init_db, create_session, set_active_session, get_recent_sessions,
+    get_or_create_active_session, add_message, toggle_message_pin,
+    get_all_messages, cleanup_test_data
 )
 from engine import run_agent_inner_loop, prewarm_ollama_model
 
-def kill_existing_server_on_port(port: int = 8000):
-    """Terminates any previously running server process bound to port 8000."""
-    try:
-        cmd = f'powershell -Command "Get-NetTCPConnection -LocalPort {port} -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess"'
-        out = subprocess.check_output(cmd, shell=True).decode().strip()
-        my_pid = os.getpid()
-        for line in out.splitlines():
-            if line.isdigit():
-                pid = int(line)
-                if pid != my_pid:
-                    subprocess.run(f"taskkill /F /PID {pid}", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except Exception:
-        pass
+app = FastAPI(title="AI Agent Thersites", version="1.0.0")
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.middleware("http")
+async def add_no_cache_header(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/static"):
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+@app.on_event("startup")
+async def startup_event():
     init_db()
     cleanup_test_data()
     asyncio.create_task(asyncio.to_thread(prewarm_ollama_model))
-    yield
-
-app = FastAPI(title="AI Agent Thersites API", version="1.0.0", lifespan=lifespan)
-
-app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
-
-@app.get("/", response_class=HTMLResponse)
-def read_root():
-    index_path = STATIC_DIR / "index.html"
-    if index_path.exists():
-        with open(index_path, "r", encoding="utf-8") as f:
-            return f.read()
-    return "<h1>AI Agent Thersites Server Running</h1><p>Index UI initializing...</p>"
-
-@app.get("/api/sessions")
-def list_sessions():
-    sessions = get_recent_sessions(limit=5)
-    active = get_or_create_active_session()
-    return {"sessions": sessions, "active_session_id": active["id"]}
-
-@app.post("/api/sessions")
-def new_session(payload: dict = Body(default={})):
-    title = payload.get("title", "New Session")
-    sess = create_session(title)
-    return {"status": "success", "session": sess}
-
-@app.post("/api/sessions/active")
-def switch_active_session(payload: dict = Body(...)):
-    session_id = payload.get("session_id")
-    if not session_id:
-        raise HTTPException(status_code=400, detail="session_id required")
-    success = set_active_session(session_id)
-    return {"status": "success" if success else "error"}
-
-@app.get("/api/messages")
-def get_messages():
-    active = get_or_create_active_session()
-    session_id = active["id"]
-    all_msgs = get_all_messages(session_id)
-    pinned_msgs = get_pinned_messages(session_id, PINNED_CONTEXT_CHAR_LIMIT)
-    rolling_msgs = get_rolling_messages(session_id, ROLLING_BUFFER_CHAR_LIMIT)
-    
-    total_chars = sum(len(m["content"]) for m in all_msgs)
-    pinned_chars = sum(len(m["content"]) for m in pinned_msgs)
-    rolling_chars = sum(len(m["content"]) for m in rolling_msgs)
-    
-    active_rolling_ids = [m["id"] for m in rolling_msgs]
-    pinned_ids = [m["id"] for m in pinned_msgs]
-    
-    return {
-        "active_session": active,
-        "model_name": MODEL_NAME,
-        "keep_alive": KEEP_AI_ALIVE,
-        "num_ctx": NUM_CTX,
-        "messages": all_msgs,
-        "pinned_messages": pinned_msgs,
-        "active_rolling_ids": active_rolling_ids,
-        "pinned_ids": pinned_ids,
-        "telemetry": {
-            "total_messages": len(all_msgs),
-            "total_chars": total_chars,
-            "pinned_chars": pinned_chars,
-            "pinned_limit": PINNED_CONTEXT_CHAR_LIMIT,
-            "rolling_chars": rolling_chars,
-            "rolling_limit": ROLLING_BUFFER_CHAR_LIMIT
-        }
-    }
-
-@app.post("/api/pin/{message_id}")
-def pin_message(message_id: int):
-    result = toggle_message_pin(message_id)
-    return result
 
 class ChatRequest(BaseModel):
     prompt: str
+    session_id: Optional[str] = None
 
-@app.post("/api/chat")
-def chat_stream(request: ChatRequest):
-    active = get_or_create_active_session()
-    session_id = active["id"]
-    
-    def event_generator():
-        for event in run_agent_inner_loop(session_id, request.prompt):
-            event_data = f"data: {json.dumps(event)}\n\n"
-            yield event_data
-            
+@app.get("/", response_class=HTMLResponse)
+async def read_index():
+    index_path = STATIC_DIR / "index.html"
+    if not index_path.exists():
+        raise HTTPException(status_code=404, detail="index.html not found")
+    with open(index_path, "r", encoding="utf-8") as f:
+        return HTMLResponse(content=f.read())
+
+@app.get("/api/sessions")
+async def list_sessions():
+    active_session = get_or_create_active_session()
+    sessions = get_recent_sessions()
+    return {"sessions": sessions, "active_session_id": active_session["id"]}
+
+@app.post("/api/sessions")
+async def create_new_session(session_id: Optional[str] = None, title: Optional[str] = None):
+    sess = create_session(session_id, title)
+    return sess
+
+@app.post("/api/sessions/{session_id}/activate")
+async def activate_session_endpoint(session_id: str):
+    sess = set_active_session(session_id)
+    return sess
+
+@app.get("/api/messages")
+async def list_messages(session_id: Optional[str] = None):
+    if not session_id:
+        active_sess = get_or_create_active_session()
+        session_id = active_sess["id"]
+    messages = get_all_messages(session_id)
+    return messages
+
+@app.post("/api/messages/{message_id}/pin")
+async def toggle_pin_endpoint(message_id: int):
+    try:
+        updated = toggle_message_pin(message_id)
+        return updated
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+@app.get("/api/chat/stream")
+async def stream_chat(prompt: str, session_id: Optional[str] = None):
+    if not session_id:
+        active_sess = get_or_create_active_session()
+        session_id = active_sess["id"]
+        
+    set_active_session(session_id)
+
+    async def event_generator():
+        generator = run_agent_inner_loop(session_id, prompt)
+        for chunk in generator:
+            yield f"data: {json.dumps(chunk)}\n\n"
+            await asyncio.sleep(0.01)
+
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 if __name__ == "__main__":
     import uvicorn
-    kill_existing_server_on_port(8000)
     uvicorn.run("server:app", host="127.0.0.1", port=8000, reload=True)

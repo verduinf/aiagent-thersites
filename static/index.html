@@ -3,101 +3,75 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Agent Thersites — Local Intern Console</title>
+    <title>AI Agent Thersites - Local Console</title>
+    <link rel="stylesheet" href="/static/style.css?v=2">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div class="app-layout">
-        <!-- Top App Header -->
+    <div class="app-container">
         <header class="app-header">
-            <div class="brand-section">
-                <span class="app-logo">📜</span>
-                <div class="brand-titles">
+            <div class="header-left">
+                <div class="logo-icon">📜</div>
+                <div class="header-titles">
                     <h1>AI Agent Thersites</h1>
                     <span class="sub-title">The Local Intern Console (Qwen3.5-9B)</span>
                 </div>
             </div>
-
-            <!-- Session Switcher Dropdown (Last 5 Sessions) -->
-            <div class="session-selector-container">
-                <label for="sessionSelect">Session:</label>
+            <div class="header-center">
+                <label for="sessionSelect" style="color: var(--text-muted); font-size: 0.85rem;">Session:</label>
                 <select id="sessionSelect" class="session-dropdown"></select>
-                <button id="btnNewSession" class="btn-secondary" title="Start New Session">+ New Session</button>
+                <button id="newSessionBtn" class="btn btn-secondary">+ New Session</button>
             </div>
-
-            <!-- Live Telemetry Badges & Performance Metrics -->
-            <div class="header-telemetry">
-                <div class="telemetry-pill">
-                    <span class="status-indicator online"></span>
-                    <span id="modelTag">qwen3.5:9b</span>
+            <div class="header-right">
+                <div class="status-indicator">
+                    <span class="status-dot"></span>
+                    <span class="status-text">qwen3.5:9b</span>
                 </div>
-                <div class="telemetry-pill perf-pill" title="Live Inference Performance">
-                    <span>⚡</span>
-                    <span id="perfTag">-- tok/s</span>
-                </div>
-                <div class="telemetry-bar-container" title="Active Model Context Budget">
-                    <div id="telemetryStatsText" class="telemetry-label">Rolling: 0 / 20k | Pinned: 0 / 5k</div>
-                    <div class="progress-track">
-                        <div id="telemetryProgressBar" class="progress-fill" style="width: 5%;"></div>
-                    </div>
-                </div>
+                <div class="perf-tag" id="perfTag">⚡ -- tok/s</div>
+                <div class="rolling-badge" id="rollingBadge">Rolling: 0 / 20k</div>
             </div>
         </header>
 
-        <!-- Main Body Layout -->
-        <div class="main-body">
-            <!-- Sidebar: Pinned 5k Context Buffer Panel -->
+        <div class="main-layout">
             <aside class="pinned-sidebar">
                 <div class="sidebar-header">
-                    <h2>📌 Pinned 5k Buffer</h2>
-                    <span id="pinnedCount" class="badge">0 / 5,000 chars</span>
+                    <h3>📌 Pinned 5k Buffer</h3>
+                    <span class="pinned-count-badge" id="pinnedBadge">0 / 5,000 chars</span>
                 </div>
-                <div id="pinnedList" class="pinned-items-container">
-                    <div class="empty-pinned-state">
-                        <p>No pinned context anchors.</p>
-                    </div>
+                <div class="pinned-content" id="pinnedContainer">
+                    <div class="empty-pinned">No pinned context anchors.</div>
                 </div>
             </aside>
 
-            <!-- Main Timeline Content Container -->
-            <main class="chat-viewport">
-                <!-- Timeline Header & Info Bar -->
-                <div class="timeline-info-bar">
-                    <span>📜 Conversation Timeline (Full History from Msg #1)</span>
-                    <span id="msgCountBadge" class="badge">0 messages</span>
+            <main class="timeline-area">
+                <div class="timeline-header">
+                    <h2>📜 Conversation Timeline (Full History from Msg #1)</h2>
+                </div>
+                
+                <div class="timeline-container" id="timelineContainer">
+                    <!-- Dynamic Messages Loaded Here -->
                 </div>
 
-                <!-- Scrollable Messages Container -->
-                <div id="messagesContainer" class="messages-timeline">
-                    <!-- Dynamic Messages Rendered via app.js -->
-                </div>
-
-                <!-- Floating Live Inner Loop Accordion Container -->
-                <div id="liveScratchAccordion" class="scratch-accordion-live hidden">
-                    <div class="scratch-header">
-                        <span class="spinner-icon">🟡</span>
-                        <span id="liveScratchTitle">Intern is thinking... (Turn 1/5)</span>
+                <div class="scratchpad-accordion" id="scratchpadAccordion">
+                    <div class="accordion-header" id="accordionHeader">
+                        <span class="accordion-title">🟡 Intern is thinking... (Turn 1/5)</span>
+                        <span class="accordion-icon">▼</span>
                     </div>
-                    <div id="liveScratchContent" class="scratch-body"></div>
+                    <div class="accordion-body" id="accordionBody">
+                        <!-- Live SSE Scratch Steps -->
+                    </div>
                 </div>
 
-                <!-- Input Footer -->
-                <footer class="chat-input-area">
-                    <div class="input-wrapper">
-                        <textarea id="promptInput" placeholder="Assign a task to Thersites (e.g., 'Write a python script to process sandbox data')..." rows="2"></textarea>
-                        <button id="btnSend" class="btn-primary">
-                            <span>Send Task</span>
-                            <span class="send-icon">➔</span>
-                        </button>
-                    </div>
-                </footer>
+                <form class="chat-input-form" id="chatForm">
+                    <textarea id="promptInput" placeholder="Give Thersites an instruction..." rows="2" required></textarea>
+                    <button type="submit" id="sendBtn" class="btn btn-primary">Send Prompt 🚀</button>
+                </form>
             </main>
         </div>
     </div>
 
-    <script src="/static/app.js"></script>
+    <script src="/static/app.js?v=2"></script>
 </body>
 </html>
