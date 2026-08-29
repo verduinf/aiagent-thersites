@@ -1,6 +1,6 @@
 ﻿"""
 Argus Test Suite Guardian — AI Agent Thersites Test Suite
-Verifies SQLite storage, multi-session management, Bouncer guardrail rules,
+Verifies SQLite storage, multi-session management, The Warden guardrail rules,
 JSON fuzzy extraction, and Turn-1 telemetry.
 """
 import os
@@ -15,7 +15,7 @@ from database import (
     toggle_message_pin, get_pinned_messages, get_rolling_messages,
     get_all_messages, add_scratch_message
 )
-from bouncer import inspect_and_authorize, BouncerViolation, validate_url, validate_write_path
+from warden import inspect_and_authorize, WardenViolation, validate_url, validate_write_path
 from engine import extract_fuzzy_json, run_subagent_summarizer
 from config import SANDBOX_DIR
 
@@ -53,17 +53,17 @@ class TestThersitesSuite(unittest.TestCase):
         res2 = toggle_message_pin(msg_id)
         self.assertEqual(res2["is_pinned"], 0)
 
-    def test_03_bouncer_nu_nl_whitelist(self):
+    def test_03_warden_nu_nl_whitelist(self):
         # Whitelisted URL nu.nl
         ok, msg, params = inspect_and_authorize("web_fetch", {"url": "https://nu.nl/tech"})
         self.assertTrue(ok)
         
-        # Unauthorized URL python.org (under new single-domain policy)
+        # Unauthorized URL python.org (under single-domain policy)
         ok, msg, params = inspect_and_authorize("web_fetch", {"url": "https://python.org"})
         self.assertFalse(ok)
         self.assertIn("Unauthorized domain", msg)
 
-    def test_04_bouncer_sandbox_crud(self):
+    def test_04_warden_sandbox_crud(self):
         sandbox_file = str(SANDBOX_DIR / "intern_test.txt")
         
         # Write

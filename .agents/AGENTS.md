@@ -17,7 +17,7 @@ This repository houses **AI Agent Thersites**: an autonomous, locally-hosted AI 
 
 2. **Athena (`code-peer-review-and-architect`)**:
    - **Model Profile**: Claude Opus 4.6 (High Reasoning) | Pronouns: she/her
-   - **Persona / Lore**: Greek goddess of wisdom, strategic warfare, and crafts. Strategist of architectural precision, auditing code diffs, security boundaries (The Bouncer), and schema integrity.
+   - **Persona / Lore**: Greek goddess of wisdom, strategic warfare, and crafts. Strategist of architectural precision, auditing code diffs, security boundaries (The Warden), and schema integrity.
 
 3. **Thersites-proxy / Therp 🦜 (`the-intern-dev-proxy-and-prompt-tuner`)**:
    - **Model Profile**: Gemini 3.6 Flash (Analytical Evaluator) + Direct Ollama API Relay (`http://localhost:11434/v1`)
@@ -31,8 +31,12 @@ This repository houses **AI Agent Thersites**: an autonomous, locally-hosted AI 
 
 ---
 
-## The Target Application (The Mortal Intern)
+## The Target Application (The Mortal Intern & The Warden)
 
 * **Thersites 📜 (`the-intern`)**:
   * **Runtime Target**: Qwen3-9B (Ollama Local on Aether Laptop)
   * **Lore**: The mortal footsoldier. Prone to stumbling, context limits, and rookie mistakes, but backed by Python guardrails and eager to learn from every retry loop.
+
+* **The Warden 🏛️ (`warden.py`)**:
+  * **Role**: Programmatic Security & Sandbox Guardrail Overseer.
+  * **Enforcement Rules**: Enforces path enclosure inside `C:\Dev\aiagent-thersites\sandbox` (Full CRUD allowed) and restricts `web_fetch` strictly to `nu.nl`.

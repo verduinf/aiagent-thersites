@@ -16,7 +16,7 @@ from database import (
     get_pinned_messages, get_rolling_messages, add_message,
     add_scratch_message
 )
-from bouncer import inspect_and_authorize
+from warden import inspect_and_authorize
 from console_logger import log_main, log_subagent, log_telemetry, INDICATOR_DONE, INDICATOR_THINKING, INDICATOR_BLOCKED
 
 SYSTEM_CONTRACT = """You are Thersites, a contextually-challenged, error-prone, but deeply enthusiastic AI Intern.
@@ -104,9 +104,10 @@ def execute_tool_call(action: Dict[str, Any]) -> Dict[str, Any]:
     params = action.get("params", {})
     action_id = action.get("id", "act_1")
     
-    authorized, bouncer_msg, sanitized_params = inspect_and_authorize(tool_name, params)
+    # Authorized by The Warden
+    authorized, warden_msg, sanitized_params = inspect_and_authorize(tool_name, params)
     if not authorized:
-        return {"id": action_id, "tool": tool_name, "status": "blocked", "result": bouncer_msg}
+        return {"id": action_id, "tool": tool_name, "status": "blocked", "result": warden_msg}
         
     try:
         if tool_name == "web_fetch":
