@@ -95,7 +95,7 @@ def prewarm_ollama_model() -> bool:
     try:
         log_main(f"Pre-warming model '{MODEL_NAME}' in VRAM (keep_alive: {KEEP_AI_ALIVE}, num_ctx: {NUM_CTX})...", INDICATOR_THINKING)
         start_t = time.time()
-        resp = requests.post(native_url, json=payload, timeout=30)
+        resp = requests.post(native_url, json=payload, timeout=60)
         elapsed = round(time.time() - start_t, 2)
         if resp.status_code == 200:
             log_main(f"Model '{MODEL_NAME}' pre-warmed into VRAM in {elapsed}s!", INDICATOR_DONE)
@@ -127,7 +127,7 @@ def query_ollama(messages: List[Dict[str, str]], model: str = MODEL_NAME) -> Tup
     }
     
     try:
-        response = requests.post(native_url, headers=headers, json=payload, timeout=60)
+        response = requests.post(native_url, headers=headers, json=payload, timeout=120)
         wall_time = time.time() - start_t
         if response.status_code == 200:
             data = response.json()
