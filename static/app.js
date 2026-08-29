@@ -10,6 +10,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const pinnedCount = document.getElementById("pinnedCount");
     const msgCountBadge = document.getElementById("msgCountBadge");
     const modelTag = document.getElementById("modelTag");
+    const perfTag = document.getElementById("perfTag");
     const telemetryStatsText = document.getElementById("telemetryStatsText");
     const telemetryProgressBar = document.getElementById("telemetryProgressBar");
     const promptInput = document.getElementById("promptInput");
@@ -64,7 +65,6 @@ document.addEventListener("DOMContentLoaded", () => {
         msgCountBadge.textContent = `${messages.length} messages`;
 
         if (messages.length === 0) {
-            // Completely clean timeline — no static filler text
             return;
         }
 
@@ -242,6 +242,10 @@ document.addEventListener("DOMContentLoaded", () => {
         if (event.type === "telemetry") {
             liveScratchTitle.textContent = `Intern is thinking... (Turn ${event.turn}/${event.max_turns})`;
             updateTelemetryBar(event.char_count, event.max_chars, 0, 5000);
+        } else if (event.type === "performance") {
+            if (event.tok_per_sec > 0) {
+                perfTag.textContent = `${event.tok_per_sec} tok/s (${event.latency_sec}s)`;
+            }
         } else if (event.type === "scratch_step") {
             let logText = `[Turn ${event.turn}] `;
             if (event.thought) logText += `Thought: ${event.thought}\n`;

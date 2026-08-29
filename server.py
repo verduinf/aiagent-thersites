@@ -13,13 +13,13 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
 from pydantic import BaseModel
 
-from config import STATIC_DIR, ROLLING_BUFFER_CHAR_LIMIT, PINNED_CONTEXT_CHAR_LIMIT, MODEL_NAME
+from config import STATIC_DIR, ROLLING_BUFFER_CHAR_LIMIT, PINNED_CONTEXT_CHAR_LIMIT, MODEL_NAME, KEEP_AI_ALIVE, NUM_CTX
 from database import (
     init_db, cleanup_test_data, get_or_create_active_session, get_recent_sessions,
     create_session, set_active_session, get_all_messages,
     get_pinned_messages, get_rolling_messages, toggle_message_pin
 )
-from engine import run_agent_inner_loop
+from engine import run_agent_inner_loop, prewarm_ollama_model
 
 def kill_existing_server_on_port(port: int = 8000):
     """Terminates any previously running server process bound to port 8000."""
@@ -39,6 +39,7 @@ def kill_existing_server_on_port(port: int = 8000):
 async def lifespan(app: FastAPI):
     init_db()
     cleanup_test_data()
+    asyncio.create_task(asyncio.to_thread(prewarm_ollama_model))
     yield
 
 app = FastAPI(title="AI Agent Thersites API", version="1.0.0", lifespan=lifespan)
@@ -91,6 +92,8 @@ def get_messages():
     return {
         "active_session": active,
         "model_name": MODEL_NAME,
+        "keep_alive": KEEP_AI_ALIVE,
+        "num_ctx": NUM_CTX,
         "messages": all_msgs,
         "pinned_messages": pinned_msgs,
         "active_rolling_ids": active_rolling_ids,

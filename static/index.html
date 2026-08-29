@@ -17,7 +17,7 @@
                 <span class="app-logo">📜</span>
                 <div class="brand-titles">
                     <h1>AI Agent Thersites</h1>
-                    <span class="sub-title">The Local Intern Console (Qwen3-9B)</span>
+                    <span class="sub-title">The Local Intern Console (Qwen3.5-9B)</span>
                 </div>
             </div>
 
@@ -28,11 +28,15 @@
                 <button id="btnNewSession" class="btn-secondary" title="Start New Session">+ New Session</button>
             </div>
 
-            <!-- Live Telemetry Badge & Model Specs -->
+            <!-- Live Telemetry Badges & Performance Metrics -->
             <div class="header-telemetry">
                 <div class="telemetry-pill">
                     <span class="status-indicator online"></span>
-                    <span id="modelTag">qwen3:9b</span>
+                    <span id="modelTag">qwen3.5:9b</span>
+                </div>
+                <div class="telemetry-pill perf-pill" title="Live Inference Performance">
+                    <span>⚡</span>
+                    <span id="perfTag">-- tok/s</span>
                 </div>
                 <div class="telemetry-bar-container" title="Active Model Context Budget">
                     <div id="telemetryStatsText" class="telemetry-label">Rolling: 0 / 20k | Pinned: 0 / 5k</div>
@@ -53,8 +57,7 @@
                 </div>
                 <div id="pinnedList" class="pinned-items-container">
                     <div class="empty-pinned-state">
-                        <p>No pinned context anchors yet.</p>
-                        <small>Click 📌 on any message in the history timeline to anchor it into Thersites' top-tier context buffer.</small>
+                        <p>No pinned context anchors.</p>
                     </div>
                 </div>
             </aside>
@@ -69,7 +72,7 @@
 
                 <!-- Scrollable Messages Container -->
                 <div id="messagesContainer" class="messages-timeline">
-                    <!-- Dynamic Messages & Scratch Accordions Rendered via app.js -->
+                    <!-- Dynamic Messages Rendered via app.js -->
                 </div>
 
                 <!-- Floating Live Inner Loop Accordion Container -->

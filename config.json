@@ -1,0 +1,12 @@
+﻿{
+  "OLLAMA_BASE_URL": "http://localhost:11434",
+  "MODEL_NAME": "qwen3.5:9b",
+  "KEEP_AI_ALIVE": "5m",
+  "NUM_CTX": 8192,
+  "ROLLING_BUFFER_CHAR_LIMIT": 20000,
+  "PINNED_CONTEXT_CHAR_LIMIT": 5000,
+  "MAX_INNER_LOOP_TURNS": 5,
+  "URL_DOMAIN_WHITELIST": [
+    "nu.nl"
+  ]
+}

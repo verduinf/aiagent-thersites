@@ -5,19 +5,24 @@ Handles prompt assembly, Turn-1 telemetry, fuzzy JSON parsing, subagent pipeline
 import os
 import re
 import json
+import time
 import requests
 from pathlib import Path
-from typing import Dict, Any, List, Generator
+from typing import Dict, Any, List, Generator, Tuple
 from config import (
-    OLLAMA_BASE_URL, MODEL_NAME, ROLLING_BUFFER_CHAR_LIMIT,
-    PINNED_CONTEXT_CHAR_LIMIT, MAX_INNER_LOOP_TURNS, SCRATCHPAD_PATH, SANDBOX_DIR
+    OLLAMA_BASE_URL, MODEL_NAME, KEEP_AI_ALIVE, NUM_CTX,
+    ROLLING_BUFFER_CHAR_LIMIT, PINNED_CONTEXT_CHAR_LIMIT,
+    MAX_INNER_LOOP_TURNS, SCRATCHPAD_PATH, SANDBOX_DIR
 )
 from database import (
     get_pinned_messages, get_rolling_messages, add_message,
     add_scratch_message, execute_user_sql_query
 )
 from warden import inspect_and_authorize
-from console_logger import log_main, log_subagent, log_telemetry, INDICATOR_DONE, INDICATOR_THINKING, INDICATOR_BLOCKED
+from console_logger import (
+    log_main, log_subagent, log_telemetry, log_performance,
+    INDICATOR_DONE, INDICATOR_THINKING, INDICATOR_BLOCKED
+)
 
 SYSTEM_CONTRACT = """You are Thersites, a contextually-challenged, error-prone, but deeply enthusiastic AI Intern.
 You work under "The Boss" and must ALWAYS respond with a structured JSON object containing your internal thoughts, user-facing content, and an array of actions.
@@ -69,42 +74,83 @@ def extract_fuzzy_json(raw_text: str) -> Dict[str, Any]:
             
     return {"thought": thought, "content": content, "actions": actions}
 
-def query_ollama(messages: List[Dict[str, str]], model: str = MODEL_NAME) -> str:
+def prewarm_ollama_model() -> bool:
+    """Pre-warms local Ollama model into VRAM during server startup."""
+    native_url = f"{OLLAMA_BASE_URL.rstrip('/')}/api/chat"
+    payload = {
+        "model": MODEL_NAME,
+        "messages": [{"role": "user", "content": "ping"}],
+        "keep_alive": KEEP_AI_ALIVE,
+        "options": {"num_ctx": NUM_CTX},
+        "stream": False
+    }
+    try:
+        log_main(f"Pre-warming model '{MODEL_NAME}' in VRAM (keep_alive: {KEEP_AI_ALIVE}, num_ctx: {NUM_CTX})...", INDICATOR_THINKING)
+        start_t = time.time()
+        resp = requests.post(native_url, json=payload, timeout=30)
+        elapsed = round(time.time() - start_t, 2)
+        if resp.status_code == 200:
+            log_main(f"Model '{MODEL_NAME}' pre-warmed successfully in {elapsed}s!", INDICATOR_DONE)
+            return True
+    except Exception as e:
+        log_main(f"Model pre-warm warning: {e}", INDICATOR_BLOCKED)
+    return False
+
+def query_ollama(messages: List[Dict[str, str]], model: str = MODEL_NAME) -> Tuple[str, Dict[str, Any]]:
     base = OLLAMA_BASE_URL.rstrip('/')
-    
-    # 1. Try Native Ollama /api/chat Endpoint
     native_url = f"{base}/api/chat"
     headers = {"Content-Type": "application/json"}
     payload = {
         "model": model,
         "messages": messages,
+        "keep_alive": KEEP_AI_ALIVE,
+        "options": {
+            "num_ctx": NUM_CTX
+        },
         "stream": False
+    }
+    
+    start_t = time.time()
+    perf_metrics = {
+        "tok_per_sec": 0.0,
+        "latency_sec": 0.0,
+        "eval_count": 0
     }
     
     try:
         response = requests.post(native_url, headers=headers, json=payload, timeout=60)
+        wall_time = time.time() - start_t
         if response.status_code == 200:
             data = response.json()
-            return data["message"]["content"]
-    except Exception:
-        pass
-        
-    # 2. Try OpenAI-compatible /v1/chat/completions Endpoint
-    v1_url = f"{base}/v1/chat/completions"
-    try:
-        response = requests.post(v1_url, headers=headers, json={"model": model, "messages": messages, "temperature": 0.7}, timeout=60)
-        if response.status_code == 200:
-            data = response.json()
-            return data["choices"][0]["message"]["content"]
+            raw_content = data["message"]["content"]
+            
+            eval_count = data.get("eval_count", len(raw_content) // 4)
+            eval_duration_ns = data.get("eval_duration", 0)
+            total_duration_ns = data.get("total_duration", 0)
+            
+            if eval_duration_ns > 0:
+                tok_per_sec = (eval_count / eval_duration_ns) * 1e9
+            else:
+                tok_per_sec = eval_count / wall_time if wall_time > 0 else 0
+                
+            latency_sec = (total_duration_ns / 1e9) if total_duration_ns > 0 else wall_time
+            
+            perf_metrics = {
+                "tok_per_sec": round(tok_per_sec, 1),
+                "latency_sec": round(latency_sec, 2),
+                "eval_count": eval_count
+            }
+            log_performance(perf_metrics["tok_per_sec"], perf_metrics["latency_sec"], perf_metrics["eval_count"])
+            return raw_content, perf_metrics
     except Exception as e:
-        log_main(f"Ollama connection error ({e}). Using Therp simulation mode.", INDICATOR_BLOCKED)
+        log_main(f"Ollama query warning ({e}). Using Therp simulation mode.", INDICATOR_BLOCKED)
         
-    # 3. Fallback Therp Simulation Output
-    return json.dumps({
+    sim_content = json.dumps({
         "thought": "Ollama local inference unavailable or starting up.",
-        "content": f"[Therp Proxy Note]: Local Ollama model '{model}' is currently offline. Here is a simulated response to verify engine & UI workflow.",
+        "content": f"[Therp Proxy Note]: Local Ollama model '{model}' is currently offline. Simulated response.",
         "actions": []
     })
+    return sim_content, perf_metrics
 
 def run_subagent_summarizer(raw_text: str) -> str:
     log_subagent("HTML Summarizer", "Spawning secondary transient context...", INDICATOR_THINKING)
@@ -112,7 +158,7 @@ def run_subagent_summarizer(raw_text: str) -> str:
         {"role": "system", "content": "You are a concise summarization subagent. Compress the input text into a clean 300-word markdown summary focusing on key factual points."},
         {"role": "user", "content": f"Summarize this content:\n\n{raw_text[:15000]}"}
     ]
-    summary = query_ollama(sub_messages)
+    summary, _ = query_ollama(sub_messages)
     log_subagent("HTML Summarizer", f"Compressed raw text -> {len(summary)} chars", INDICATOR_DONE)
     return summary
 
@@ -225,7 +271,14 @@ def run_agent_inner_loop(session_id: str, user_prompt: str) -> Generator[Dict[st
             "status": "thinking"
         }
         
-        raw_output = query_ollama(llm_messages)
+        raw_output, perf = query_ollama(llm_messages)
+        
+        yield {
+            "type": "performance",
+            "tok_per_sec": perf["tok_per_sec"],
+            "latency_sec": perf["latency_sec"],
+            "eval_count": perf["eval_count"]
+        }
         
         try:
             parsed = extract_fuzzy_json(raw_output)

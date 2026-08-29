@@ -1,42 +1,40 @@
 ﻿"""
-Color-coded ANSI Console Telemetry Logger for AI Agent Thersites
-Renders indented tree views, subagent actions, and stoplight indicators.
+ANSI Color Telemetry & Console Logger for AI Agent Thersites
+Provides visual terminal feedback with distinct colors for Main Agent, Subagents, Warden, and Telemetry.
 """
 import sys
 
+# Ensure Windows CMD handles UTF-8 output properly
 if hasattr(sys.stdout, "reconfigure"):
     try:
         sys.stdout.reconfigure(encoding="utf-8")
     except Exception:
         pass
 
-# ANSI Color Constants
-COLOR_MAIN = "\033[92m"      # Light Green for Main Agent (Thersites)
-COLOR_SUB = "\033[93m"       # Light Yellow for Subagents (Summarizer)
-COLOR_WARDEN = "\033[91m"    # Light Red for The Warden Guardrail Intercepts
-COLOR_INFO = "\033[96m"      # Light Cyan for System & Telemetry
 COLOR_RESET = "\033[0m"
+COLOR_MAIN = "\033[92m"      # Light Green
+COLOR_SUBAGENT = "\033[93m"  # Light Yellow
+COLOR_WARDEN = "\033[91m"    # Light Red / Magenta
+COLOR_TELEMETRY = "\033[96m" # Light Cyan
+COLOR_PERF = "\033[95m"      # Light Magenta / Violet
 
-# Stoplights
 INDICATOR_DONE = "🟢 [DONE]"
 INDICATOR_THINKING = "🟡 [THINKING/RUNNING]"
 INDICATOR_BLOCKED = "🔴 [BLOCKED/ERROR]"
 
-def log_main(message: str, indicator: str = INDICATOR_THINKING):
-    formatted = f"{COLOR_MAIN}🟢 [MAIN AGENT] {indicator} {message}{COLOR_RESET}"
-    print(formatted, flush=True)
+def log_main(msg: str, indicator: str = INDICATOR_THINKING):
+    print(f"{COLOR_MAIN}🟢 [MAIN AGENT] {indicator} {msg}{COLOR_RESET}")
 
-def log_subagent(subagent_name: str, message: str, indicator: str = INDICATOR_THINKING):
-    formatted = f"{COLOR_SUB}🟡 │   ├── [SUBAGENT: {subagent_name}] {indicator} {message}{COLOR_RESET}"
-    print(formatted, flush=True)
+def log_subagent(name: str, msg: str, indicator: str = INDICATOR_THINKING):
+    print(f"{COLOR_SUBAGENT}│   ├── [SUBAGENT: {name}] {indicator} {msg}{COLOR_RESET}")
 
-def log_warden(action_name: str, message: str, is_allowed: bool = True):
-    status = "ALLOWED" if is_allowed else "BLOCKED"
-    indicator = INDICATOR_DONE if is_allowed else INDICATOR_BLOCKED
-    color = COLOR_INFO if is_allowed else COLOR_WARDEN
-    formatted = f"{color}🔴 [WARDEN: {status}] {indicator} Action '{action_name}': {message}{COLOR_RESET}"
-    print(formatted, flush=True)
+def log_warden(action: str, allowed: bool, details: str):
+    status = "ALLOWED" if allowed else "BLOCKED"
+    indicator = INDICATOR_DONE if allowed else INDICATOR_BLOCKED
+    print(f"{COLOR_WARDEN}🔴 [WARDEN: {status}] {indicator} Action '{action}': {details}{COLOR_RESET}")
 
-def log_telemetry(turn: int, max_turns: int, char_count: int, max_chars: int):
-    formatted = f"{COLOR_INFO}📊 [TELEMETRY] Turn {turn}/{max_turns} | Rolling Buffer: {char_count:,} / {max_chars:,} chars{COLOR_RESET}"
-    print(formatted, flush=True)
+def log_telemetry(turn: int, max_turns: int, rolling_chars: int, max_chars: int):
+    print(f"{COLOR_TELEMETRY}📊 [TELEMETRY] Turn {turn}/{max_turns} | Rolling Buffer: {rolling_chars:,} / {max_chars:,} chars{COLOR_RESET}")
+
+def log_performance(tok_per_sec: float, latency_sec: float, eval_count: int):
+    print(f"{COLOR_PERF}⚡ [PERFORMANCE] {tok_per_sec:.1f} tok/s | Total Latency: {latency_sec:.2f}s | Output Tokens: {eval_count}{COLOR_RESET}")
