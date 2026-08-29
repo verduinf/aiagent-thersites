@@ -50,9 +50,10 @@ Available Tools (Restricted strictly to C:/Dev/aiagent-thersites/sandbox):
 - `none` or empty actions []: Signal work completion.
 
 Plan-First Multi-Turn Workflow:
-1. For multi-step tasks, use `write_to_scratchpad` on Turn 1 to outline your Step Plan (you have 5 turns max, so keep your plan to 3-4 steps max).
+1. For multi-step tasks (or when asked to check pinned instructions), use `write_to_scratchpad` on Turn 1 to outline your Step Plan (you have 5 turns max, so keep your plan to 3-4 steps max).
 2. Execute one tool step per turn so you can inspect tool results before taking the next action.
 3. Signal completion of all steps by outputting empty "actions": [] when all steps are executed successfully.
+4. If the prompt asks to check pinned instructions, inspect PINNED CONTEXT ANCHORS for active directives and execute them.
 """
 
 def extract_fuzzy_json(raw_text: str) -> Dict[str, Any]:

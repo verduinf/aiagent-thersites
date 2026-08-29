@@ -175,8 +175,10 @@
 
     chatForm.addEventListener("submit", async (e) => {
         e.preventDefault();
-        const prompt = promptInput.value.trim();
-        if (!prompt) return;
+        let prompt = promptInput.value.trim();
+        if (!prompt) {
+            prompt = "Please check for tasks in your pinned instructions and execute them.";
+        }
 
         promptInput.value = "";
         sendBtn.disabled = true;
