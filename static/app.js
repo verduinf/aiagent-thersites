@@ -17,7 +17,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     async function initApp() {
         await loadSessions();
-        if (sessionSelect.options.length > 0) {
+        if (currentSessionId) {
+            await loadMessages(currentSessionId);
+        } else if (sessionSelect.options.length > 0) {
             currentSessionId = sessionSelect.value;
             await loadMessages(currentSessionId);
         } else {
@@ -28,16 +30,24 @@ document.addEventListener("DOMContentLoaded", () => {
     async function loadSessions() {
         try {
             const res = await fetch("/api/sessions");
-            const sessions = await res.json();
+            const data = await res.json();
+            const sessions = Array.isArray(data) ? data : (data.sessions || []);
+            const activeId = data.active_session_id || currentSessionId;
+
             sessionSelect.innerHTML = "";
             sessions.forEach(s => {
                 const opt = document.createElement("option");
                 opt.value = s.id;
-                opt.textContent = `${s.id} (${s.created_at || 'New'})`;
+                const titleText = s.title && s.title !== s.id ? s.title : s.id;
+                opt.textContent = `${titleText} (${s.created_at || 'New'})`;
                 sessionSelect.appendChild(opt);
             });
-            if (currentSessionId) {
+
+            if (activeId && sessionSelect.querySelector(`option[value="${activeId}"]`)) {
+                currentSessionId = activeId;
                 sessionSelect.value = currentSessionId;
+            } else if (sessionSelect.options.length > 0) {
+                currentSessionId = sessionSelect.value;
             }
         } catch (err) {
             console.error("Error loading sessions:", err);
