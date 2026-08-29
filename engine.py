@@ -88,12 +88,11 @@ def clean_html_to_text(html_content: str, max_chars: int = 3000) -> str:
     return text[:max_chars]
 
 def prewarm_ollama_model() -> bool:
-    """Pre-warms local Ollama model into VRAM during server startup."""
+    """Instantly pre-loads model into VRAM on startup using empty messages array (6s)."""
     native_url = f"{OLLAMA_BASE_URL.rstrip('/')}/api/chat"
     payload = {
         "model": MODEL_NAME,
-        "messages": [{"role": "user", "content": "ping"}],
-        "format": "json",
+        "messages": [],
         "keep_alive": KEEP_AI_ALIVE,
         "options": {"num_ctx": NUM_CTX},
         "stream": False
@@ -101,10 +100,10 @@ def prewarm_ollama_model() -> bool:
     try:
         log_main(f"Pre-warming model '{MODEL_NAME}' in VRAM (keep_alive: {KEEP_AI_ALIVE}, num_ctx: {NUM_CTX})...", INDICATOR_THINKING)
         start_t = time.time()
-        resp = requests.post(native_url, json=payload, timeout=120)
+        resp = requests.post(native_url, json=payload, timeout=30)
         elapsed = round(time.time() - start_t, 2)
         if resp.status_code == 200:
-            log_main(f"Model '{MODEL_NAME}' pre-warmed successfully in {elapsed}s!", INDICATOR_DONE)
+            log_main(f"Model '{MODEL_NAME}' pre-warmed into VRAM in {elapsed}s!", INDICATOR_DONE)
             return True
     except Exception as e:
         log_main(f"Model pre-warm warning: {e}", INDICATOR_BLOCKED)
