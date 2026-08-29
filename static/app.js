@@ -1,5 +1,5 @@
 ﻿/**
- * AI Agent Thersites — Clean Dark-Mode Web Client Logic with Phase 2 Context Badging
+ * AI Agent Thersites — Clean Dark-Mode Web Client Logic
  */
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -50,7 +50,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const res = await fetch("/api/messages");
             const data = await res.json();
             
-            modelTag.textContent = data.model_name || "qwen3:9b";
+            modelTag.textContent = data.model_name || "qwen3.5:9b";
             renderMessages(data.messages, data.active_rolling_ids || [], data.pinned_ids || []);
             renderPinned(data.pinned_messages, data.telemetry.pinned_chars, data.telemetry.pinned_limit);
             updateTelemetryBar(data.telemetry.rolling_chars, data.telemetry.rolling_limit, data.telemetry.pinned_chars, data.telemetry.pinned_limit);
@@ -64,12 +64,7 @@ document.addEventListener("DOMContentLoaded", () => {
         msgCountBadge.textContent = `${messages.length} messages`;
 
         if (messages.length === 0) {
-            messagesContainer.innerHTML = `
-                <div style="text-align: center; color: #8b949e; padding: 4rem 1rem;">
-                    <h3>📜 Thersites Intern Console Ready</h3>
-                    <p style="font-size: 0.85rem; margin-top: 0.5rem;">Assign a task to Thersites below. All conversation history is tracked from Msg #1 with exact timestamps.</p>
-                </div>
-            `;
+            // Completely clean timeline — no static filler text
             return;
         }
 
@@ -129,8 +124,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (pinnedMsgs.length === 0) {
             pinnedList.innerHTML = `
                 <div class="empty-pinned-state">
-                    <p>No pinned context anchors yet.</p>
-                    <small>Click 📌 on any message in the timeline to anchor it into Thersites' top-tier context buffer.</small>
+                    <p>No pinned context anchors.</p>
                 </div>
             `;
             return;
