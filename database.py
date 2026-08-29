@@ -78,7 +78,7 @@ def create_session(session_id: Optional[str] = None, title: Optional[str] = None
             (session_id, title, now, now)
         )
         conn.commit()
-        return {"id": session_id, "title": title, "created_at": now, "is_active": 1}
+        return {"id": session_id, "title": title, "created_at": now, "is_active": 1, "msg_count": 0}
 
 def set_active_session(session_id: str) -> Dict[str, Any]:
     with get_db_connection() as conn:
@@ -91,7 +91,8 @@ def get_recent_sessions(limit: int = 20) -> List[Dict[str, Any]]:
     """Returns sessions ordered by the timestamp of their most recent message."""
     with get_db_connection() as conn:
         rows = conn.execute("""
-            SELECT s.id, s.title, s.created_at, s.is_active, 
+            SELECT s.id, s.title, s.created_at, s.is_active,
+                   COUNT(m.id) as msg_count,
                    COALESCE(MAX(m.created_at), s.created_at) as last_activity
             FROM sessions s
             LEFT JOIN messages m ON s.id = m.session_id AND m.role NOT LIKE 'test_%'
@@ -106,6 +107,7 @@ def get_or_create_active_session() -> Dict[str, Any]:
     with get_db_connection() as conn:
         active = conn.execute("""
             SELECT s.id, s.title, s.created_at, s.is_active,
+                   COUNT(m.id) as msg_count,
                    COALESCE(MAX(m.created_at), s.created_at) as last_activity
             FROM sessions s
             LEFT JOIN messages m ON s.id = m.session_id AND m.role NOT LIKE 'test_%'

@@ -36,8 +36,9 @@
             sessions.forEach(s => {
                 const opt = document.createElement("option");
                 opt.value = s.id;
-                const shortId = s.id.length > 25 ? s.id.substring(0, 25) + "..." : s.id;
-                opt.textContent = `${shortId} (${s.is_active ? 'Active' : 'Saved'})`;
+                const displayTitle = s.title && s.title !== s.id ? s.title : "Intern Session";
+                const countText = s.msg_count !== undefined ? `${s.msg_count} msgs` : "0 msgs";
+                opt.textContent = `${displayTitle} (${countText})`;
                 if (s.is_active && !currentSessionId) {
                     currentSessionId = s.id;
                 }
@@ -139,7 +140,9 @@
             });
         });
 
-        timelineContainer.scrollTop = timelineContainer.scrollHeight;
+        setTimeout(() => {
+            timelineContainer.scrollTop = timelineContainer.scrollHeight;
+        }, 50);
     }
 
     async function togglePin(msgId) {
