@@ -36,7 +36,7 @@ CRITICAL FORMATTING RULE: You MUST output valid JSON matching this exact structu
   ]
 }
 
-Available Tools (RESTRICTED strictly to sandbox enclosure 'C:/Dev/aiagent-thersites/sandbox'):
+Available Tools:
 1. `web_fetch`: params `{"url": "https://nu.nl"}`. (Fetches URL and auto-summarizes content. ONLY whitelisted URL is nu.nl).
 2. `write_to_file`: params `{"filepath": "C:/Dev/aiagent-thersites/sandbox/file.txt", "content": "..."}`.
 3. `read_file`: params `{"filepath": "C:/Dev/aiagent-thersites/sandbox/file.txt"}`.
@@ -69,27 +69,60 @@ def extract_fuzzy_json(raw_text: str) -> Dict[str, Any]:
             
     return {"thought": thought, "content": content, "actions": actions}
 
-def query_ollama(messages: List[Dict[str, str]], model: str = MODEL_NAME) -> str:
-    url = f"{OLLAMA_BASE_URL.rstrip('/')}/chat/completions"
+def detect_local_ollama_model() -> str:
+    """Discovers installed local Ollama models (e.g. qwen3.5:9b, qwen2.5:7b)."""
+    tags_url = f"{OLLAMA_BASE_URL.rstrip('/')}/api/tags"
+    try:
+        resp = requests.get(tags_url, timeout=3)
+        if resp.status_code == 200:
+            models = resp.json().get("models", [])
+            for m in models:
+                name = m.get("name", "").lower()
+                if "qwen" in name:
+                    return m["name"]
+            if models:
+                return models[0]["name"]
+    except Exception:
+        pass
+    return MODEL_NAME
+
+def query_ollama(messages: List[Dict[str, str]], model: str = None) -> str:
+    active_model = model or detect_local_ollama_model()
+    base = OLLAMA_BASE_URL.rstrip('/')
+    
+    # 1. Try Native Ollama /api/chat Endpoint
+    native_url = f"{base}/api/chat"
     headers = {"Content-Type": "application/json"}
     payload = {
-        "model": model,
+        "model": active_model,
         "messages": messages,
-        "temperature": 0.7
+        "stream": False
     }
     
     try:
-        response = requests.post(url, headers=headers, json=payload, timeout=45)
-        response.raise_for_status()
-        data = response.json()
-        return data["choices"][0]["message"]["content"]
+        response = requests.post(native_url, headers=headers, json=payload, timeout=60)
+        if response.status_code == 200:
+            data = response.json()
+            return data["message"]["content"]
+    except Exception:
+        pass
+        
+    # 2. Try OpenAI-compatible /v1/chat/completions Endpoint
+    v1_url = f"{base}/v1/chat/completions"
+    try:
+        response = requests.post(v1_url, headers=headers, json={"model": active_model, "messages": messages, "temperature": 0.7}, timeout=60)
+        if response.status_code == 200:
+            data = response.json()
+            return data["choices"][0]["message"]["content"]
     except Exception as e:
         log_main(f"Ollama connection error ({e}). Using Therp simulation mode.", INDICATOR_BLOCKED)
-        return json.dumps({
-            "thought": "Ollama local inference unavailable or starting up.",
-            "content": f"[Therp Proxy Note]: Local Ollama model '{model}' is currently offline. Here is a simulated response to verify engine & UI workflow.",
-            "actions": []
-        })
+        
+    # 3. Fallback Therp Simulation Output
+    return json.dumps({
+        "thought": "Ollama local inference unavailable or starting up.",
+        "content": f"[Therp Proxy Note]: Local Ollama model '{active_model}' is currently offline. Here is a simulated response to verify engine & UI workflow.",
+        "actions": []
+    })
 
 def run_subagent_summarizer(raw_text: str) -> str:
     log_subagent("HTML Summarizer", "Spawning secondary transient context...", INDICATOR_THINKING)
@@ -97,7 +130,7 @@ def run_subagent_summarizer(raw_text: str) -> str:
         {"role": "system", "content": "You are a concise summarization subagent. Compress the input text into a clean 300-word markdown summary focusing on key factual points."},
         {"role": "user", "content": f"Summarize this content:\n\n{raw_text[:15000]}"}
     ]
-    summary = query_ollama(sub_messages, model=MODEL_NAME)
+    summary = query_ollama(sub_messages)
     log_subagent("HTML Summarizer", f"Compressed raw text -> {len(summary)} chars", INDICATOR_DONE)
     return summary
 
