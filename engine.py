@@ -146,13 +146,13 @@ def prewarm_ollama_model() -> bool:
         "messages": [],
         "keep_alive": KEEP_AI_ALIVE,
         "options": {
-            "num_ctx": 2048,
+            "num_ctx": 4096,
             "num_thread": 8
         },
         "stream": False
     }
     try:
-        log_main(f"Pre-warming model '{MODEL_NAME}' in VRAM (keep_alive: {KEEP_AI_ALIVE}, num_ctx: 2048)...", INDICATOR_THINKING)
+        log_main(f"Pre-warming model '{MODEL_NAME}' in VRAM (keep_alive: {KEEP_AI_ALIVE}, num_ctx: 4096)...", INDICATOR_THINKING)
         start_t = time.time()
         resp = requests.post(native_url, json=payload, timeout=60)
         elapsed = round(time.time() - start_t, 2)
@@ -169,7 +169,7 @@ def query_ollama(messages: List[Dict[str, str]], model: str = MODEL_NAME) -> Tup
     headers = {"Content-Type": "application/json"}
     
     total_chars = sum(len(m.get("content", "")) for m in messages)
-    dynamic_num_ctx = 2048 if total_chars < 5000 else 4096
+    dynamic_num_ctx = 4096 if total_chars > 3000 else 2048
     
     payload = {
         "model": model,
