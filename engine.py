@@ -105,22 +105,34 @@ def extract_fuzzy_json(raw_text: str) -> Dict[str, Any]:
     return {"thought": thought, "content": content, "actions": actions}
 
 def clean_html_to_text(html_content: str, max_chars: int = 4000) -> str:
-    """Strips noise, nav, header, and footer blocks while preserving headline article links in 0.01s."""
+    """Robust HTML stripper prioritizing <main> / <article> blocks and filtering nav noise."""
     text = re.sub(r'<script[^>]*>.*?</script>', '', html_content, flags=re.DOTALL | re.IGNORECASE)
     text = re.sub(r'<style[^>]*>.*?</style>', '', text, flags=re.DOTALL | re.IGNORECASE)
-    text = re.sub(r'<nav[^>]*>.*?</nav>', '', text, flags=re.DOTALL | re.IGNORECASE)
-    text = re.sub(r'<header[^>]*>.*?</header>', '', text, flags=re.DOTALL | re.IGNORECASE)
-    text = re.sub(r'<footer[^>]*>.*?</footer>', '', text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r'<svg[^>]*>.*?</svg>', '', text, flags=re.DOTALL | re.IGNORECASE)
     
+    main_matches = re.findall(r'<(main|article)[^>]*>(.*?)</\1>', text, flags=re.DOTALL | re.IGNORECASE)
+    if main_matches:
+        text = " ".join([m[1] for m in main_matches])
+    else:
+        text = re.sub(r'<(header|nav|footer)[^>]*>.*?</\1>', '', text, flags=re.DOTALL | re.IGNORECASE)
+        text = re.sub(r'<div[^>]*(header|nav|menu|footer)[^>]*>.*?</div>', '', text, flags=re.DOTALL | re.IGNORECASE)
+
+    NAV_KEYWORDS = {'voorpagina', 'net binnen', 'binnenland', 'buitenland', 'politiek', 'economie', 'sport', 
+                    'formule 1', 'wielrennen', 'inloggen', 'zoeken', 'menu', 'tv-gids', 'weer', 'spellen', 'shop'}
+
     def link_replacer(match):
         href = match.group(1)
         anchor_text = re.sub(r'<[^>]+>', ' ', match.group(2)).strip()
+        
         if href.startswith("/"):
             href = f"https://nu.nl{href}"
-        if anchor_text and len(anchor_text) > 8 and not href.endswith(('.css', '.js', '.png', '.jpg', '.svg', '.gif')):
-            return f" [{anchor_text}]({href}) "
-        return f" {anchor_text} "
-        
+            
+        lower_anchor = anchor_text.lower()
+        if lower_anchor in NAV_KEYWORDS or len(anchor_text) < 12 or href.endswith(('.css', '.js', '.png', '.jpg', '.svg', '.gif')):
+            return f" {anchor_text} "
+            
+        return f" [{anchor_text}]({href}) "
+
     text = re.sub(r'<a\s+[^>]*href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', link_replacer, text, flags=re.DOTALL | re.IGNORECASE)
     text = re.sub(r'<[^>]+>', ' ', text)
     text = re.sub(r'\s+', ' ', text).strip()
