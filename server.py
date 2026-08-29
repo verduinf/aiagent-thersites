@@ -5,6 +5,7 @@ Provides REST & SSE Streaming API endpoints and serves the clean dark-mode Web U
 import json
 import asyncio
 from pathlib import Path
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Body
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
@@ -18,14 +19,16 @@ from database import (
 )
 from engine import run_agent_inner_loop
 
-app = FastAPI(title="AI Agent Thersites API", version="1.0.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    init_db()
+    yield
+
+app = FastAPI(title="AI Agent Thersites API", version="1.0.0", lifespan=lifespan)
 
 # Mount Static Files
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
-
-@app.on_event("startup")
-def startup_event():
-    init_db()
 
 @app.get("/", response_class=HTMLResponse)
 def read_root():
@@ -62,7 +65,6 @@ def get_messages():
     all_msgs = get_all_messages(session_id)
     pinned_msgs = get_pinned_messages(session_id, PINNED_CONTEXT_CHAR_LIMIT)
     
-    # Calculate telemetry metrics
     total_chars = sum(len(m["content"]) for m in all_msgs)
     pinned_chars = sum(len(m["content"]) for m in pinned_msgs)
     
