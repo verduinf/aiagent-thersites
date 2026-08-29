@@ -233,6 +233,7 @@ def run_agent_inner_loop(session_id: str, user_prompt: str) -> Generator[Dict[st
     
     scratch_history = []
     final_response = ""
+    is_error_response = False
     
     for turn in range(1, MAX_INNER_LOOP_TURNS + 1):
         pinned_msgs = get_pinned_messages(session_id, PINNED_CONTEXT_CHAR_LIMIT)
@@ -282,6 +283,8 @@ def run_agent_inner_loop(session_id: str, user_prompt: str) -> Generator[Dict[st
             log_main(f"Ollama Connection Error: {query_err}", INDICATOR_BLOCKED)
             err_msg = f"[OLLAMA ERROR]: Local model 'qwen3.5:9b' is offline or unreachable ({str(query_err)})."
             add_scratch_message(session_id, turn, "ollama_error", err_msg)
+            is_error_response = True
+            final_response = err_msg
             yield {
                 "type": "scratch_step",
                 "turn": turn,
@@ -289,7 +292,6 @@ def run_agent_inner_loop(session_id: str, user_prompt: str) -> Generator[Dict[st
                 "status": "error",
                 "details": err_msg
             }
-            final_response = err_msg
             break
             
         yield {
@@ -339,12 +341,18 @@ def run_agent_inner_loop(session_id: str, user_prompt: str) -> Generator[Dict[st
             
         scratch_history.append({"actions_executed": actions, "results": action_results})
         
-    final_msg = add_message(session_id, "assistant", final_response)
-    log_main(f"Outer Loop Complete. Message #{final_msg['sequence_id']} saved.", INDICATOR_DONE)
-    
-    yield {
-        "type": "final_response",
-        "message": final_msg
-    }
-    
+    if not is_error_response:
+        final_msg = add_message(session_id, "assistant", final_response)
+        log_main(f"Outer Loop Complete. Message #{final_msg['sequence_id']} saved.", INDICATOR_DONE)
+        yield {
+            "type": "final_response",
+            "message": final_msg
+        }
+    else:
+        log_main("Outer Loop Terminated with error. Error message omitted from outer context history.", INDICATOR_BLOCKED)
+        yield {
+            "type": "final_response",
+            "message": {"id": -1, "sequence_id": -1, "role": "assistant", "content": final_response, "created_at": "now"}
+        }
+        
     return final_response
