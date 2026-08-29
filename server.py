@@ -1,10 +1,11 @@
-﻿"""
+"""
 FastAPI Server & SSE API Endpoints for AI Agent Thersites
 Provides session routing, timeline queries, pin management, and streaming inner-loop responses.
 """
 import os
 import json
 import asyncio
+import subprocess
 from typing import Optional, Dict, Any, List
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Query, Request, Response
@@ -20,6 +21,22 @@ from database import (
     get_all_messages, cleanup_test_data
 )
 from engine import run_agent_inner_loop, prewarm_ollama_model
+
+def kill_existing_port_process(port: int = 8000):
+    """Terminates any old orphaned process listening on the target port before starting a new server instance."""
+    try:
+        cmd = f'netstat -ano | findstr LISTENING | findstr :{port}'
+        output = subprocess.check_output(cmd, shell=True, text=True, errors='ignore')
+        current_pid = str(os.getpid())
+        for line in output.strip().splitlines():
+            parts = line.split()
+            if len(parts) >= 5:
+                pid = parts[-1]
+                if pid.isdigit() and pid != current_pid:
+                    print(f"Terminating old server process (PID {pid}) listening on port {port}...")
+                    subprocess.run(f"taskkill /F /PID {pid}", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        pass
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -108,11 +125,14 @@ async def stream_chat(prompt: str, session_id: Optional[str] = None):
     async def event_generator():
         generator = run_agent_inner_loop(session_id, prompt)
         for chunk in generator:
-            yield f"data: {json.dumps(chunk)}\n\n"
+            yield f"data: {json.dumps(chunk)}
+
+"
             await asyncio.sleep(0.01)
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 if __name__ == "__main__":
+    kill_existing_port_process(port=8000)
     import uvicorn
     uvicorn.run("server:app", host="127.0.0.1", port=8000, reload=True)
