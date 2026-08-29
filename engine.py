@@ -62,13 +62,36 @@ def extract_fuzzy_json(raw_text: str) -> Dict[str, Any]:
         clean_text = re.sub(r"^```(?:json)?\s*", "", clean_text, flags=re.IGNORECASE)
         clean_text = re.sub(r"\s*```$", "", clean_text)
         
-    match = re.search(r'\{.*\}', clean_text, re.DOTALL)
-    if not match:
-        raise ValueError("No JSON object found in response.")
-        
-    json_str = match.group(0)
-    data = json.loads(json_str)
+    decoder = json.JSONDecoder()
+    idx = 0
+    valid_candidates = []
     
+    while idx < len(clean_text):
+        pos = clean_text.find('{', idx)
+        if pos == -1:
+            break
+        try:
+            obj, end = decoder.raw_decode(clean_text, pos)
+            if isinstance(obj, dict):
+                valid_candidates.append(obj)
+                idx = end
+                continue
+        except json.JSONDecodeError:
+            pass
+        idx = pos + 1
+        
+    data = None
+    for candidate in valid_candidates:
+        if "thought" in candidate or "actions" in candidate:
+            data = candidate
+            break
+            
+    if not data and valid_candidates:
+        data = valid_candidates[0]
+        
+    if not data:
+        raise ValueError("No valid contract JSON object found in response.")
+        
     thought = data.get("thought", "Processing...")
     content = data.get("content", "")
     actions = data.get("actions", [])
@@ -81,10 +104,13 @@ def extract_fuzzy_json(raw_text: str) -> Dict[str, Any]:
             
     return {"thought": thought, "content": content, "actions": actions}
 
-def clean_html_to_text(html_content: str, max_chars: int = 3500) -> str:
-    """Strips HTML noise while preserving headline article links in 0.01s."""
+def clean_html_to_text(html_content: str, max_chars: int = 4000) -> str:
+    """Strips noise, nav, header, and footer blocks while preserving headline article links in 0.01s."""
     text = re.sub(r'<script[^>]*>.*?</script>', '', html_content, flags=re.DOTALL | re.IGNORECASE)
     text = re.sub(r'<style[^>]*>.*?</style>', '', text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r'<nav[^>]*>.*?</nav>', '', text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r'<header[^>]*>.*?</header>', '', text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r'<footer[^>]*>.*?</footer>', '', text, flags=re.DOTALL | re.IGNORECASE)
     
     def link_replacer(match):
         href = match.group(1)
@@ -200,7 +226,7 @@ def execute_tool_call(action: Dict[str, Any]) -> Dict[str, Any]:
             log_subagent("Web Fetcher", f"Fetching '{url}'...", INDICATOR_THINKING)
             resp = requests.get(url, timeout=10)
             raw_html = resp.text
-            clean_text = clean_html_to_text(raw_html, max_chars=3500)
+            clean_text = clean_html_to_text(raw_html, max_chars=4000)
             log_subagent("Web Fetcher", f"Extracted {len(clean_text)} chars of text with article URLs in 0.01s", INDICATOR_DONE)
             return {"id": action_id, "tool": tool_name, "status": "success", "result": clean_text}
             
@@ -280,7 +306,7 @@ def run_agent_inner_loop(session_id: str, user_prompt: str) -> Generator[Dict[st
             
         for s in scratch_history:
             if "results" in s:
-                res_summary = "\n".join([f"[TOOL RESULT '{r.get('tool')}']: {str(r.get('result'))[:1500]}" for r in s.get("results", [])])
+                res_summary = "\n".join([f"[TOOL RESULT '{r.get('tool')}']: {str(r.get('result'))[:4000]}" for r in s.get("results", [])])
                 llm_messages.append({"role": "user", "content": res_summary})
             elif "error" in s:
                 llm_messages.append({"role": "user", "content": f"[SYSTEM ERROR]: {s['error']}"})
