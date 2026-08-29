@@ -6,6 +6,7 @@ import os
 import json
 import asyncio
 from typing import Optional, Dict, Any, List
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -20,7 +21,14 @@ from database import (
 )
 from engine import run_agent_inner_loop, prewarm_ollama_model
 
-app = FastAPI(title="AI Agent Thersites", version="1.0.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    cleanup_test_data()
+    asyncio.create_task(asyncio.to_thread(prewarm_ollama_model))
+    yield
+
+app = FastAPI(title="AI Agent Thersites", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -41,12 +49,6 @@ async def add_no_cache_header(request: Request, call_next):
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
-@app.on_event("startup")
-async def startup_event():
-    init_db()
-    cleanup_test_data()
-    asyncio.create_task(asyncio.to_thread(prewarm_ollama_model))
-
 class ChatRequest(BaseModel):
     prompt: str
     session_id: Optional[str] = None
@@ -58,6 +60,10 @@ async def read_index():
         raise HTTPException(status_code=404, detail="index.html not found")
     with open(index_path, "r", encoding="utf-8") as f:
         return HTMLResponse(content=f.read())
+
+@app.get("/favicon.ico")
+async def favicon_endpoint():
+    return Response(status_code=204)
 
 @app.get("/api/sessions")
 async def list_sessions():
