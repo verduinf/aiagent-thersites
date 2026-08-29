@@ -35,7 +35,7 @@
                     <span id="modelTag">qwen3:9b</span>
                 </div>
                 <div class="telemetry-bar-container" title="Active Model Context Budget">
-                    <div class="telemetry-label">20k Buffer</div>
+                    <div id="telemetryStatsText" class="telemetry-label">Rolling: 0 / 20k | Pinned: 0 / 5k</div>
                     <div class="progress-track">
                         <div id="telemetryProgressBar" class="progress-fill" style="width: 5%;"></div>
                     </div>
@@ -84,7 +84,7 @@
                 <!-- Input Footer -->
                 <footer class="chat-input-area">
                     <div class="input-wrapper">
-                        <textarea id="promptInput" placeholder="Assign a task to Thersites (e.g., 'Write a bash script to organize sandbox files')..." rows="2"></textarea>
+                        <textarea id="promptInput" placeholder="Assign a task to Thersites (e.g., 'Write a python script to process sandbox data')..." rows="2"></textarea>
                         <button id="btnSend" class="btn-primary">
                             <span>Send Task</span>
                             <span class="send-icon">➔</span>

@@ -7,5 +7,8 @@ echo   URL: http://127.0.0.1:8000
 echo ============================================================
 echo.
 cd /d C:\Dev\aiagent-thersites
+echo Opening Web UI in browser...
+start http://127.0.0.1:8000
+echo Starting FastAPI Server...
 python server.py
 pause

@@ -1,5 +1,5 @@
 ﻿/**
- * AI Agent Thersites — Clean Dark-Mode Web Client Logic
+ * AI Agent Thersites — Clean Dark-Mode Web Client Logic with Phase 2 Context Badging
  */
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -10,6 +10,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const pinnedCount = document.getElementById("pinnedCount");
     const msgCountBadge = document.getElementById("msgCountBadge");
     const modelTag = document.getElementById("modelTag");
+    const telemetryStatsText = document.getElementById("telemetryStatsText");
     const telemetryProgressBar = document.getElementById("telemetryProgressBar");
     const promptInput = document.getElementById("promptInput");
     const btnSend = document.getElementById("btnSend");
@@ -20,7 +21,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     let currentSessionId = null;
 
-    // Load Sessions & Active Messages
     async function init() {
         await loadSessions();
         await loadMessages();
@@ -51,15 +51,15 @@ document.addEventListener("DOMContentLoaded", () => {
             const data = await res.json();
             
             modelTag.textContent = data.model_name || "qwen3:9b";
-            renderMessages(data.messages);
+            renderMessages(data.messages, data.active_rolling_ids || [], data.pinned_ids || []);
             renderPinned(data.pinned_messages, data.telemetry.pinned_chars, data.telemetry.pinned_limit);
-            updateTelemetryBar(data.telemetry.total_chars, data.telemetry.rolling_limit);
+            updateTelemetryBar(data.telemetry.rolling_chars, data.telemetry.rolling_limit, data.telemetry.pinned_chars, data.telemetry.pinned_limit);
         } catch (err) {
             console.error("Error loading messages:", err);
         }
     }
 
-    function renderMessages(messages) {
+    function renderMessages(messages, activeRollingIds, pinnedIds) {
         messagesContainer.innerHTML = "";
         msgCountBadge.textContent = `${messages.length} messages`;
 
@@ -81,16 +81,31 @@ document.addEventListener("DOMContentLoaded", () => {
             const avatar = isUser ? "👤" : "📜";
             const roleName = isUser ? "The Boss" : "Thersites (Intern)";
 
+            const isPinned = pinnedIds.includes(msg.id) || msg.is_pinned === 1;
+            const isInRolling = activeRollingIds.includes(msg.id);
+
+            let statusBadgeHtml = "";
+            if (isPinned) {
+                statusBadgeHtml = `<span class="context-status-badge pinned">📌 Pinned Anchor</span>`;
+            } else if (isInRolling) {
+                statusBadgeHtml = `<span class="context-status-badge in-rolling">🟢 In 20k Window</span>`;
+            } else {
+                statusBadgeHtml = `<span class="context-status-badge historic">📜 Historic History</span>`;
+            }
+
             card.innerHTML = `
                 <div class="avatar">${avatar}</div>
                 <div class="message-bubble">
                     <div class="message-meta">
-                        <span class="role-name">${roleName}</span>
+                        <div>
+                            <span class="role-name">${roleName}</span>
+                            ${statusBadgeHtml}
+                        </div>
                         <div class="meta-details">
                             <span class="seq-badge">Msg #${msg.sequence_id}</span>
                             <span class="timestamp">${msg.created_at}</span>
-                            <button class="pin-btn ${msg.is_pinned ? 'pinned' : ''}" data-id="${msg.id}" title="Toggle Pinned Context">
-                                ${msg.is_pinned ? '📌 Pinned' : '📌'}
+                            <button class="pin-btn ${isPinned ? 'pinned' : ''}" data-id="${msg.id}" title="Toggle Pinned Context">
+                                ${isPinned ? '📌 Pinned' : '📌'}
                             </button>
                         </div>
                     </div>
@@ -98,14 +113,12 @@ document.addEventListener("DOMContentLoaded", () => {
                 </div>
             `;
 
-            // Pin toggle listener
             const pinBtn = card.querySelector(".pin-btn");
             pinBtn.addEventListener("click", () => togglePin(msg.id));
 
             messagesContainer.appendChild(card);
         });
 
-        // Auto-scroll to bottom
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
     }
 
@@ -139,8 +152,9 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    function updateTelemetryBar(totalChars, rollingLimit) {
-        const percentage = Math.min(100, Math.round((totalChars / rollingLimit) * 100));
+    function updateTelemetryBar(rollingChars, rollingLimit, pinnedChars, pinnedLimit) {
+        telemetryStatsText.textContent = `Rolling: ${rollingChars.toLocaleString()} / 20k | Pinned: ${pinnedChars.toLocaleString()} / 5k`;
+        const percentage = Math.min(100, Math.round((rollingChars / rollingLimit) * 100));
         telemetryProgressBar.style.width = `${Math.max(5, percentage)}%`;
     }
 
@@ -153,7 +167,6 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    // Switch Session
     sessionSelect.addEventListener("change", async (e) => {
         const newSessionId = e.target.value;
         try {
@@ -168,7 +181,6 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    // Create New Session
     btnNewSession.addEventListener("click", async () => {
         const title = prompt("Enter Title for New Session:", `Session ${new Date().toLocaleTimeString()}`);
         if (!title) return;
@@ -185,7 +197,6 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    // Send Task & Handle SSE Streaming
     async function sendTask() {
         const promptText = promptInput.value.trim();
         if (!promptText) return;
@@ -193,7 +204,6 @@ document.addEventListener("DOMContentLoaded", () => {
         promptInput.value = "";
         btnSend.disabled = true;
 
-        // Show live scratch accordion
         liveScratchAccordion.classList.remove("hidden");
         liveScratchTitle.textContent = "Intern is thinking... (Turn 1/5)";
         liveScratchContent.textContent = "Connecting to Ollama model...";
@@ -215,7 +225,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
                 buffer += decoder.decode(value, { stream: true });
                 const lines = buffer.split("\n\n");
-                buffer = lines.pop(); // Keep incomplete chunk
+                buffer = lines.pop();
 
                 for (const line of lines) {
                     if (line.startsWith("data: ")) {
@@ -237,7 +247,7 @@ document.addEventListener("DOMContentLoaded", () => {
     function handleSSEEvent(event) {
         if (event.type === "telemetry") {
             liveScratchTitle.textContent = `Intern is thinking... (Turn ${event.turn}/${event.max_turns})`;
-            updateTelemetryBar(event.char_count, event.max_chars);
+            updateTelemetryBar(event.char_count, event.max_chars, 0, 5000);
         } else if (event.type === "scratch_step") {
             let logText = `[Turn ${event.turn}] `;
             if (event.thought) logText += `Thought: ${event.thought}\n`;

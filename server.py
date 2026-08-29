@@ -15,19 +15,17 @@ from config import STATIC_DIR, ROLLING_BUFFER_CHAR_LIMIT, PINNED_CONTEXT_CHAR_LI
 from database import (
     init_db, get_or_create_active_session, get_recent_sessions,
     create_session, set_active_session, get_all_messages,
-    get_pinned_messages, toggle_message_pin
+    get_pinned_messages, get_rolling_messages, toggle_message_pin
 )
 from engine import run_agent_inner_loop
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
     init_db()
     yield
 
 app = FastAPI(title="AI Agent Thersites API", version="1.0.0", lifespan=lifespan)
 
-# Mount Static Files
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 @app.get("/", response_class=HTMLResponse)
@@ -64,20 +62,28 @@ def get_messages():
     session_id = active["id"]
     all_msgs = get_all_messages(session_id)
     pinned_msgs = get_pinned_messages(session_id, PINNED_CONTEXT_CHAR_LIMIT)
+    rolling_msgs = get_rolling_messages(session_id, ROLLING_BUFFER_CHAR_LIMIT)
     
     total_chars = sum(len(m["content"]) for m in all_msgs)
     pinned_chars = sum(len(m["content"]) for m in pinned_msgs)
+    rolling_chars = sum(len(m["content"]) for m in rolling_msgs)
+    
+    active_rolling_ids = [m["id"] for m in rolling_msgs]
+    pinned_ids = [m["id"] for m in pinned_msgs]
     
     return {
         "active_session": active,
         "model_name": MODEL_NAME,
         "messages": all_msgs,
         "pinned_messages": pinned_msgs,
+        "active_rolling_ids": active_rolling_ids,
+        "pinned_ids": pinned_ids,
         "telemetry": {
             "total_messages": len(all_msgs),
             "total_chars": total_chars,
             "pinned_chars": pinned_chars,
             "pinned_limit": PINNED_CONTEXT_CHAR_LIMIT,
+            "rolling_chars": rolling_chars,
             "rolling_limit": ROLLING_BUFFER_CHAR_LIMIT
         }
     }

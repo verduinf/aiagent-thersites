@@ -36,15 +36,17 @@ CRITICAL FORMATTING RULE: You MUST output valid JSON matching this exact structu
   ]
 }
 
-Available Tools:
+Available Tools (RESTRICTED strictly to sandbox enclosure 'C:/Dev/aiagent-thersites/sandbox'):
 1. `web_fetch`: params `{"url": "https://nu.nl"}`. (Fetches URL and auto-summarizes content. ONLY whitelisted URL is nu.nl).
-2. `write_to_file`: params `{"filepath": "C:/Dev/aiagent-thersites/sandbox/file.txt", "content": "..."}`. (RESTRICTED strictly to sandbox).
-3. `read_file`: params `{"filepath": "C:/Dev/aiagent-thersites/sandbox/file.txt"}`. (RESTRICTED strictly to sandbox).
-4. `delete_file`: params `{"filepath": "C:/Dev/aiagent-thersites/sandbox/file.txt"}`. (RESTRICTED strictly to sandbox).
+2. `write_to_file`: params `{"filepath": "C:/Dev/aiagent-thersites/sandbox/file.txt", "content": "..."}`.
+3. `read_file`: params `{"filepath": "C:/Dev/aiagent-thersites/sandbox/file.txt"}`.
+4. `delete_file`: params `{"filepath": "C:/Dev/aiagent-thersites/sandbox/file.txt"}`.
 5. `list_sandbox`: params `{"dirpath": "C:/Dev/aiagent-thersites/sandbox"}`.
 6. `write_to_scratchpad`: params `{"filepath": "scratchpad.md", "content": "..."}`.
 7. `sqlite_query_executor`: params `{"query": "SELECT * FROM thersites_scratchpad;"}`. (Read-only on project data tables, Full CRUD allowed ONLY on table 'thersites_scratchpad').
 8. `none` or empty actions `[]`: Signal that you have finished your work and are ready to deliver your final answer.
+
+CONTEXT RECOVERY RULE: If you sense you are missing specific file paths, requirements, or details mentioned earlier that might be outside your active 20k rolling context buffer, politely ask The Boss in your 'content' message to pin that earlier message or repeat the detail (e.g., "Boss, I feel like you mentioned a specific file path earlier outside my 20k rolling window. Could you pin that earlier message for me?").
 """
 
 def extract_fuzzy_json(raw_text: str) -> Dict[str, Any]:
@@ -204,6 +206,7 @@ def run_agent_inner_loop(session_id: str, user_prompt: str) -> Generator[Dict[st
             "max_turns": MAX_INNER_LOOP_TURNS,
             "char_count": rolling_char_count,
             "max_chars": ROLLING_BUFFER_CHAR_LIMIT,
+            "active_rolling_ids": [m["id"] for m in rolling_msgs],
             "status": "thinking"
         }
         
