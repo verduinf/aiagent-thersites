@@ -1,0 +1,100 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Agent Thersites — Local Intern Console</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="app-layout">
+        <!-- Top App Header -->
+        <header class="app-header">
+            <div class="brand-section">
+                <span class="app-logo">📜</span>
+                <div class="brand-titles">
+                    <h1>AI Agent Thersites</h1>
+                    <span class="sub-title">The Local Intern Console (Qwen3-9B)</span>
+                </div>
+            </div>
+
+            <!-- Session Switcher Dropdown (Last 5 Sessions) -->
+            <div class="session-selector-container">
+                <label for="sessionSelect">Session:</label>
+                <select id="sessionSelect" class="session-dropdown"></select>
+                <button id="btnNewSession" class="btn-secondary" title="Start New Session">+ New Session</button>
+            </div>
+
+            <!-- Live Telemetry Badge & Model Specs -->
+            <div class="header-telemetry">
+                <div class="telemetry-pill">
+                    <span class="status-indicator online"></span>
+                    <span id="modelTag">qwen3:9b</span>
+                </div>
+                <div class="telemetry-bar-container" title="Active Model Context Budget">
+                    <div class="telemetry-label">20k Buffer</div>
+                    <div class="progress-track">
+                        <div id="telemetryProgressBar" class="progress-fill" style="width: 5%;"></div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Body Layout -->
+        <div class="main-body">
+            <!-- Sidebar: Pinned 5k Context Buffer Panel -->
+            <aside class="pinned-sidebar">
+                <div class="sidebar-header">
+                    <h2>📌 Pinned 5k Buffer</h2>
+                    <span id="pinnedCount" class="badge">0 / 5,000 chars</span>
+                </div>
+                <div id="pinnedList" class="pinned-items-container">
+                    <div class="empty-pinned-state">
+                        <p>No pinned context anchors yet.</p>
+                        <small>Click 📌 on any message in the history timeline to anchor it into Thersites' top-tier context buffer.</small>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Main Timeline Content Container -->
+            <main class="chat-viewport">
+                <!-- Timeline Header & Info Bar -->
+                <div class="timeline-info-bar">
+                    <span>📜 Conversation Timeline (Full History from Msg #1)</span>
+                    <span id="msgCountBadge" class="badge">0 messages</span>
+                </div>
+
+                <!-- Scrollable Messages Container -->
+                <div id="messagesContainer" class="messages-timeline">
+                    <!-- Dynamic Messages & Scratch Accordions Rendered via app.js -->
+                </div>
+
+                <!-- Floating Live Inner Loop Accordion Container -->
+                <div id="liveScratchAccordion" class="scratch-accordion-live hidden">
+                    <div class="scratch-header">
+                        <span class="spinner-icon">🟡</span>
+                        <span id="liveScratchTitle">Intern is thinking... (Turn 1/5)</span>
+                    </div>
+                    <div id="liveScratchContent" class="scratch-body"></div>
+                </div>
+
+                <!-- Input Footer -->
+                <footer class="chat-input-area">
+                    <div class="input-wrapper">
+                        <textarea id="promptInput" placeholder="Assign a task to Thersites (e.g., 'Write a bash script to organize sandbox files')..." rows="2"></textarea>
+                        <button id="btnSend" class="btn-primary">
+                            <span>Send Task</span>
+                            <span class="send-icon">➔</span>
+                        </button>
+                    </div>
+                </footer>
+            </main>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
