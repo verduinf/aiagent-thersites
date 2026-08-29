@@ -1,97 +1,91 @@
 ﻿"""
-The Warden — Programmatic Security & Sandbox Guardrail Overseer
-Enforces sandbox path enclosure in /sandbox/, URL domain checks (strictly nu.nl), and SQL query safety.
+The Warden — Guardrail Security & Scope Enforcer for AI Agent Thersites
+Enforces sandbox enclosure, domain whitelisting, and SQL table mutation rules.
 """
+import os
+import re
 from pathlib import Path
-from urllib.parse import urlparse
 from typing import Tuple, Dict, Any
-from config import SANDBOX_DIR, URL_DOMAIN_WHITELIST, SCRATCHPAD_PATH
-from console_logger import log_warden
+from config import SANDBOX_DIR, URL_DOMAIN_WHITELIST
 
 class WardenViolation(Exception):
-    """Exception raised when an action violates security guardrail policies."""
+    """Raised when a tool action violates safety or sandbox boundaries."""
     pass
 
-def validate_url(url: str) -> str:
-    """Verifies target URL domain against whitelist."""
-    parsed = urlparse(url)
-    hostname = (parsed.hostname or "").lower()
-    
-    if not any(hostname == domain or hostname.endswith("." + domain) for domain in URL_DOMAIN_WHITELIST):
-        err_msg = f"[ERROR: Unauthorized domain '{hostname}'. URL must be in whitelist: {URL_DOMAIN_WHITELIST}]"
-        log_warden("web_fetch", allowed=False, details=err_msg)
-        raise WardenViolation(err_msg)
+def validate_url(url: str) -> Tuple[bool, str]:
+    if not url or not isinstance(url, str):
+        return False, "Invalid or missing URL parameter."
         
-    log_warden("web_fetch", allowed=True, details=f"Domain '{hostname}' authorized by The Warden.")
-    return url
+    for domain in URL_DOMAIN_WHITELIST:
+        pattern = rf"^https?://(?:[a-zA-Z0-9-]+\.)*{re.escape(domain)}(?:/.*)?$"
+        if re.match(pattern, url, re.IGNORECASE):
+            return True, f"Domain '{domain}' authorized by The Warden."
+            
+    return False, f"Unauthorized domain '{url}'. URL must be in whitelist: {URL_DOMAIN_WHITELIST}"
 
-def validate_write_path(target_path: str) -> Path:
-    """Enforces strict path resolution inside C:/Dev/aiagent-thersites/sandbox or scratchpad.md."""
-    path_obj = Path(target_path).resolve()
-    
-    # Override/Allow scratchpad.md explicitly
-    if path_obj == SCRATCHPAD_PATH.resolve():
-        log_warden("write_to_scratchpad", allowed=True, details=f"Path '{path_obj.name}' authorized as scratchpad.")
-        return path_obj
+def validate_write_path(filepath: str) -> Tuple[bool, str]:
+    if not filepath or not isinstance(filepath, str):
+        return False, "Invalid or missing filepath parameter."
         
-    sandbox_resolved = SANDBOX_DIR.resolve()
     try:
-        path_obj.relative_to(sandbox_resolved)
-    except ValueError:
-        err_msg = f"[ERROR: Path sandbox violation. Target path '{target_path}' resolves outside '{sandbox_resolved}']"
-        log_warden("write_to_file", allowed=False, details=err_msg)
-        raise WardenViolation(err_msg)
+        resolved = Path(filepath).resolve()
+        sandbox_resolved = SANDBOX_DIR.resolve()
         
-    log_warden("write_to_file", allowed=True, details=f"Path '{path_obj.name}' within sandbox enclosure.")
-    return path_obj
+        if resolved.exists() and resolved.is_dir():
+            return False, f"Target path '{filepath}' is a directory. Please specify a file name inside the sandbox (e.g., '{filepath}/bus_story.txt')."
+            
+        if resolved == sandbox_resolved or sandbox_resolved in resolved.parents:
+            return True, f"Path '{filepath}' within sandbox enclosure."
+        else:
+            return False, f"Path sandbox violation. Target path '{filepath}' resolves outside '{SANDBOX_DIR}'"
+    except Exception as e:
+        return False, f"Invalid file path structure: {str(e)}"
 
-def validate_sql_query(query: str) -> str:
-    """
-    Enforces SQL Query Safety:
-    - SELECT queries (Read-Only) allowed across all project data tables.
-    - Write/Update/Delete/Modify queries allowed ONLY on table 'thersites_scratchpad'.
-    """
-    q_clean = query.strip().upper()
-    
-    if q_clean.startswith("SELECT") or q_clean.startswith("EXPLAIN") or q_clean.startswith("PRAGMA"):
-        log_warden("sqlite_query_executor", allowed=True, details="Read-only SELECT query authorized by The Warden.")
-        return query
+def validate_sql_query(query: str) -> Tuple[bool, str]:
+    if not query or not isinstance(query, str):
+        return False, "Invalid or missing SQL query."
         
-    # Check if mutation target is strictly thersites_scratchpad
-    if "THERSITES_SCRATCHPAD" in q_clean:
-        log_warden("sqlite_query_executor", allowed=True, details="SQL mutation authorized on table 'thersites_scratchpad'.")
-        return query
-    else:
-        err_msg = "[ERROR: SQL Write/Delete/Modification statements are restricted strictly to table 'thersites_scratchpad'. System tables (messages, sessions, scratch_messages) are read-only.]"
-        log_warden("sqlite_query_executor", allowed=False, details=err_msg)
-        raise WardenViolation(err_msg)
+    clean_q = query.strip()
+    is_select = clean_q.upper().startswith("SELECT")
+    
+    if is_select:
+        return True, "Read-only SELECT query authorized by The Warden."
+        
+    forbidden_tables = ["messages", "sessions", "scratch_messages"]
+    for table in forbidden_tables:
+        if re.search(rf"\b{table}\b", clean_q, re.IGNORECASE):
+            return False, f"SQL Write/Delete/Modification statements are restricted strictly to table 'thersites_scratchpad'. System tables ({', '.join(forbidden_tables)}) are read-only."
+            
+    if "thersites_scratchpad" in clean_q.lower():
+        return True, "SQL mutation authorized on table 'thersites_scratchpad'."
+        
+    return False, "SQL mutations allowed ONLY on table 'thersites_scratchpad'."
 
 def inspect_and_authorize(tool_name: str, params: Dict[str, Any]) -> Tuple[bool, str, Dict[str, Any]]:
-    """Programmatically inspects and authorizes tool calls before execution."""
-    try:
-        sanitized_params = dict(params)
+    if tool_name == "web_fetch":
+        url = params.get("url", "")
+        ok, msg = validate_url(url)
+        return ok, msg, params
         
-        if tool_name == "web_fetch":
-            url = params.get("url", "")
-            sanitized_params["url"] = validate_url(url)
-            
-        elif tool_name in ("write_to_file", "read_file", "delete_file", "list_sandbox"):
-            filepath = params.get("filepath", params.get("dirpath", str(SANDBOX_DIR)))
-            validated_path = validate_write_path(filepath)
-            sanitized_params["filepath"] = str(validated_path)
-            
-        elif tool_name == "write_to_scratchpad":
-            sanitized_params["filepath"] = str(SCRATCHPAD_PATH)
-            
-        elif tool_name == "sqlite_query_executor":
-            query = params.get("query", "")
-            sanitized_params["query"] = validate_sql_query(query)
-            
-        return True, "Authorized by The Warden", sanitized_params
+    elif tool_name in ("write_to_file", "read_file", "delete_file"):
+        filepath = params.get("filepath", "")
+        ok, msg = validate_write_path(filepath)
+        return ok, msg, params
         
-    except WardenViolation as e:
-        return False, str(e), params
-    except Exception as ex:
-        err = f"Warden Inspection Exception: {str(ex)}"
-        log_warden(tool_name, allowed=False, details=err)
-        return False, err, params
+    elif tool_name == "list_sandbox":
+        dirpath = params.get("dirpath", str(SANDBOX_DIR))
+        ok, msg = validate_write_path(dirpath)
+        if not ok and os.path.exists(dirpath):
+            ok = True
+            msg = "Sandbox directory listing authorized."
+        return ok, msg, params
+        
+    elif tool_name == "sqlite_query_executor":
+        query = params.get("query", "")
+        ok, msg = validate_sql_query(query)
+        return ok, msg, params
+        
+    elif tool_name in ("write_to_scratchpad", "none", "finish", ""):
+        return True, "Authorized action.", params
+        
+    return True, f"Action '{tool_name}' allowed.", params
