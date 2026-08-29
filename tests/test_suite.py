@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path("C:/Dev/aiagent-thersites").resolve()))
 from database import (
     init_db, create_session, get_recent_sessions, add_message,
     toggle_message_pin, get_pinned_messages, get_rolling_messages,
-    get_all_messages, add_scratch_message, cleanup_test_data
+    get_all_messages, add_scratch_message, cleanup_test_data, delete_message
 )
 from warden import inspect_and_authorize, WardenViolation, validate_url, validate_write_path, validate_sql_query
 from engine import extract_fuzzy_json, clean_html_to_text
@@ -110,6 +110,18 @@ class TestThersitesSuite(unittest.TestCase):
         self.assertEqual(parsed["thought"], "I should answer politely.")
         self.assertEqual(parsed["content"], "Here is the summary!")
         self.assertEqual(len(parsed["actions"]), 1)
+
+    def test_07_delete_message(self):
+
+        session_id = self.test_session["id"]
+        msg = add_message(session_id, "test_user", "Temporary typo message to delete")
+        msg_id = msg["id"]
+        
+        self.assertTrue(delete_message(msg_id))
+        all_msgs = get_all_messages(session_id)
+        msg_ids = [m["id"] for m in all_msgs]
+        self.assertNotIn(msg_id, msg_ids)
+
 
 if __name__ == "__main__":
     unittest.main()

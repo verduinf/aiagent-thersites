@@ -161,6 +161,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         <span class="seq-badge">Msg #${m.sequence_id}</span>
                         <span class="message-time">${m.created_at || ''}</span>
                         <button class="pin-btn ${pinClass}" data-msg-id="${m.id}" title="Toggle Pin">&#128205;</button>
+                        <button class="delete-btn" data-msg-id="${m.id}" title="Delete Message">&#128465;</button>
                     </div>
                 </div>
                 <div class="message-body">${escapeHtml(m.content)}</div>
@@ -181,9 +182,28 @@ document.addEventListener("DOMContentLoaded", () => {
             });
         });
 
+        document.querySelectorAll(".delete-btn").forEach(btn => {
+            btn.addEventListener("click", async (e) => {
+                const msgId = e.target.getAttribute("data-msg-id");
+                if (confirm("Delete this message to free up context budget?")) {
+                    await deleteMessage(msgId);
+                }
+            });
+        });
+
         setTimeout(() => {
             timelineContainer.scrollTop = timelineContainer.scrollHeight;
         }, 50);
+    }
+
+    
+    async function deleteMessage(msgId) {
+        try {
+            await fetch(`/api/messages/${msgId}`, { method: "DELETE" });
+            await loadMessages(currentSessionId);
+        } catch (err) {
+            console.error("Error deleting message:", err);
+        }
     }
 
     async function togglePin(msgId) {

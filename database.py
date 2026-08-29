@@ -239,3 +239,10 @@ def cleanup_test_data():
         conn.execute("DELETE FROM sessions WHERE id LIKE 'test_%' OR id LIKE 'Argus%'")
         conn.execute("DELETE FROM sessions WHERE id NOT IN (SELECT DISTINCT session_id FROM messages)")
         conn.commit()
+
+def delete_message(message_id: int) -> bool:
+    """Deletes a message by ID to free up context budget and clean timeline history."""
+    with get_db_connection() as conn:
+        cursor = conn.execute("DELETE FROM messages WHERE id = ?", (message_id,))
+        conn.commit()
+        return cursor.rowcount > 0

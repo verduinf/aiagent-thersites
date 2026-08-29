@@ -18,7 +18,7 @@ from config import STATIC_DIR, MODEL_NAME
 from database import (
     init_db, create_session, set_active_session, get_recent_sessions,
     get_or_create_active_session, add_message, toggle_message_pin,
-    get_all_messages, cleanup_test_data
+    get_all_messages, cleanup_test_data, delete_message
 )
 from engine import run_agent_inner_loop, prewarm_ollama_model
 
@@ -113,6 +113,13 @@ async def toggle_pin_endpoint(message_id: int):
         return updated
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+@app.delete("/api/messages/{message_id}")
+async def delete_message_endpoint(message_id: int):
+    deleted = delete_message(message_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Message not found")
+    return {"status": "success", "message_id": message_id}
 
 @app.get("/api/chat/stream")
 async def stream_chat(prompt: str, session_id: Optional[str] = None):
