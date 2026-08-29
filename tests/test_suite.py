@@ -1,7 +1,7 @@
 ﻿"""
 Argus Test Suite Guardian — AI Agent Thersites Test Suite
 Verifies SQLite storage, multi-session management, The Warden guardrail rules,
-JSON fuzzy extraction, and Turn-1 telemetry.
+JSON fuzzy extraction, SQL query safety, and Turn-1 telemetry.
 """
 import os
 import sys
@@ -15,7 +15,7 @@ from database import (
     toggle_message_pin, get_pinned_messages, get_rolling_messages,
     get_all_messages, add_scratch_message
 )
-from warden import inspect_and_authorize, WardenViolation, validate_url, validate_write_path
+from warden import inspect_and_authorize, WardenViolation, validate_url, validate_write_path, validate_sql_query
 from engine import extract_fuzzy_json, run_subagent_summarizer
 from config import SANDBOX_DIR
 
@@ -58,7 +58,7 @@ class TestThersitesSuite(unittest.TestCase):
         ok, msg, params = inspect_and_authorize("web_fetch", {"url": "https://nu.nl/tech"})
         self.assertTrue(ok)
         
-        # Unauthorized URL python.org (under single-domain policy)
+        # Unauthorized URL python.org
         ok, msg, params = inspect_and_authorize("web_fetch", {"url": "https://python.org"})
         self.assertFalse(ok)
         self.assertIn("Unauthorized domain", msg)
@@ -66,25 +66,37 @@ class TestThersitesSuite(unittest.TestCase):
     def test_04_warden_sandbox_crud(self):
         sandbox_file = str(SANDBOX_DIR / "intern_test.txt")
         
-        # Write
         ok, msg, params = inspect_and_authorize("write_to_file", {"filepath": sandbox_file})
         self.assertTrue(ok)
         
-        # Read
         ok, msg, params = inspect_and_authorize("read_file", {"filepath": sandbox_file})
         self.assertTrue(ok)
         
-        # Delete
         ok, msg, params = inspect_and_authorize("delete_file", {"filepath": sandbox_file})
         self.assertTrue(ok)
         
-        # Sandbox Violation
         system_path = "C:/Windows/System32/hacked.dll"
         ok, msg, params = inspect_and_authorize("write_to_file", {"filepath": system_path})
         self.assertFalse(ok)
         self.assertIn("Path sandbox violation", msg)
 
-    def test_05_fuzzy_json_parser(self):
+    def test_05_warden_sql_query_safety(self):
+        # SELECT on messages (Allowed)
+        ok, msg, params = inspect_and_authorize("sqlite_query_executor", {"query": "SELECT * FROM messages LIMIT 5;"})
+        self.assertTrue(ok)
+        
+        # INSERT into thersites_scratchpad (Allowed)
+        ok, msg, params = inspect_and_authorize("sqlite_query_executor", {
+            "query": "INSERT INTO thersites_scratchpad (key, value, updated_at) VALUES ('task_1', 'done', '2026-08-29');"
+        })
+        self.assertTrue(ok)
+        
+        # DELETE from messages (BLOCKED by The Warden!)
+        ok, msg, params = inspect_and_authorize("sqlite_query_executor", {"query": "DELETE FROM messages WHERE id = 1;"})
+        self.assertFalse(ok)
+        self.assertIn("restricted strictly to table 'thersites_scratchpad'", msg)
+
+    def test_06_fuzzy_json_parser(self):
         raw_llm_output = """
         Sure Boss! Here is my response:
         ```json

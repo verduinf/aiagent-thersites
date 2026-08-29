@@ -14,7 +14,7 @@ from config import (
 )
 from database import (
     get_pinned_messages, get_rolling_messages, add_message,
-    add_scratch_message
+    add_scratch_message, execute_user_sql_query
 )
 from warden import inspect_and_authorize
 from console_logger import log_main, log_subagent, log_telemetry, INDICATOR_DONE, INDICATOR_THINKING, INDICATOR_BLOCKED
@@ -36,14 +36,14 @@ CRITICAL FORMATTING RULE: You MUST output valid JSON matching this exact structu
   ]
 }
 
-Available Tools (RESTRICTED strictly to sandbox enclosure 'C:/Dev/aiagent-thersites/sandbox'):
+Available Tools:
 1. `web_fetch`: params `{"url": "https://nu.nl"}`. (Fetches URL and auto-summarizes content. ONLY whitelisted URL is nu.nl).
-2. `write_to_file`: params `{"filepath": "C:/Dev/aiagent-thersites/sandbox/file.txt", "content": "..."}`.
-3. `read_file`: params `{"filepath": "C:/Dev/aiagent-thersites/sandbox/file.txt"}`.
-4. `delete_file`: params `{"filepath": "C:/Dev/aiagent-thersites/sandbox/file.txt"}`.
+2. `write_to_file`: params `{"filepath": "C:/Dev/aiagent-thersites/sandbox/file.txt", "content": "..."}`. (RESTRICTED strictly to sandbox).
+3. `read_file`: params `{"filepath": "C:/Dev/aiagent-thersites/sandbox/file.txt"}`. (RESTRICTED strictly to sandbox).
+4. `delete_file`: params `{"filepath": "C:/Dev/aiagent-thersites/sandbox/file.txt"}`. (RESTRICTED strictly to sandbox).
 5. `list_sandbox`: params `{"dirpath": "C:/Dev/aiagent-thersites/sandbox"}`.
 6. `write_to_scratchpad`: params `{"filepath": "scratchpad.md", "content": "..."}`.
-7. `sqlite_query_executor`: params `{"query": "SELECT * FROM ...;"}`.
+7. `sqlite_query_executor`: params `{"query": "SELECT * FROM thersites_scratchpad;"}`. (Read-only on project data tables, Full CRUD allowed ONLY on table 'thersites_scratchpad').
 8. `none` or empty actions `[]`: Signal that you have finished your work and are ready to deliver your final answer.
 """
 
@@ -104,7 +104,6 @@ def execute_tool_call(action: Dict[str, Any]) -> Dict[str, Any]:
     params = action.get("params", {})
     action_id = action.get("id", "act_1")
     
-    # Authorized by The Warden
     authorized, warden_msg, sanitized_params = inspect_and_authorize(tool_name, params)
     if not authorized:
         return {"id": action_id, "tool": tool_name, "status": "blocked", "result": warden_msg}
@@ -149,6 +148,11 @@ def execute_tool_call(action: Dict[str, Any]) -> Dict[str, Any]:
             with open(SCRATCHPAD_PATH, "w", encoding="utf-8") as f:
                 f.write(content)
             return {"id": action_id, "tool": tool_name, "status": "success", "result": f"Scratchpad updated at '{SCRATCHPAD_PATH.name}'"}
+            
+        elif tool_name == "sqlite_query_executor":
+            query = sanitized_params["query"]
+            sql_results = execute_user_sql_query(query)
+            return {"id": action_id, "tool": tool_name, "status": "success", "result": sql_results}
             
         elif tool_name in ("none", "finish", ""):
             return {"id": action_id, "tool": "none", "status": "success", "result": "Inner loop finished."}

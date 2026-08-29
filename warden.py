@@ -2,6 +2,7 @@
 The Warden — Programmatic Guardrail & Sandbox Enforcement Engine
 Intercepts all tool calls and enforces absolute rules before hitting network or disk.
 """
+import re
 from pathlib import Path
 from urllib.parse import urlparse
 from typing import Dict, Any, Tuple
@@ -47,6 +48,31 @@ def validate_scratchpad_path(target_path_str: str) -> Path:
         log_warden("write_to_scratchpad", f"Overriding path '{target_path_str}' -> '{expected.name}'", is_allowed=True)
     return expected
 
+def validate_sql_query(query: str) -> str:
+    cleaned = query.strip()
+    upper_query = cleaned.upper()
+    
+    # Check query type
+    is_select = upper_query.startswith("SELECT")
+    is_mutation = any(upper_query.startswith(kw) for kw in ("INSERT", "UPDATE", "DELETE", "REPLACE"))
+    is_ddl = any(upper_query.startswith(kw) for kw in ("DROP", "ALTER", "CREATE", "TRUNCATE"))
+    
+    if is_select:
+        log_warden("sqlite_query_executor", "Read-only SELECT query authorized by The Warden.", is_allowed=True)
+        return cleaned
+        
+    if is_mutation or is_ddl:
+        # Must strictly target thersites_scratchpad table
+        if "THERSITES_SCRATCHPAD" in upper_query:
+            log_warden("sqlite_query_executor", "SQL mutation authorized on table 'thersites_scratchpad'.", is_allowed=True)
+            return cleaned
+        else:
+            raise WardenViolation(
+                "[ERROR: SQL Write/Delete/Modification statements are restricted strictly to table 'thersites_scratchpad'. System tables (messages, sessions, scratch_messages) are read-only.]"
+            )
+            
+    raise WardenViolation(f"[ERROR: Unsupported or dangerous SQL query structure: '{cleaned[:30]}...']")
+
 def inspect_and_authorize(tool_name: str, params: Dict[str, Any]) -> Tuple[bool, str, Dict[str, Any]]:
     """
     Intercepts tool calls and runs absolute programmatic rules.
@@ -82,7 +108,13 @@ def inspect_and_authorize(tool_name: str, params: Dict[str, Any]) -> Tuple[bool,
             log_warden("write_to_scratchpad", f"Scratchpad path target enforced to '{validated_path.name}'", is_allowed=True)
             return True, "Scratchpad authorized", sanitized
             
-        elif tool_name in ("sqlite_query_executor", "summarize_tool", "finish", "none"):
+        elif tool_name == "sqlite_query_executor":
+            query = params.get("query", "")
+            validated_query = validate_sql_query(query)
+            sanitized["query"] = validated_query
+            return True, "SQL query authorized", sanitized
+            
+        elif tool_name in ("summarize_tool", "finish", "none"):
             log_warden(tool_name, "Safe utility action authorized.", is_allowed=True)
             return True, "Action authorized", sanitized
             

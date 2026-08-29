@@ -49,6 +49,15 @@ def init_db():
                 FOREIGN KEY (session_id) REFERENCES sessions (id)
             )
         """)
+        # Intern DB Scratchpad Table (Full CRUD for Thersites)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS thersites_scratchpad (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                key TEXT UNIQUE NOT NULL,
+                value TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        """)
         conn.commit()
     finally:
         conn.close()
@@ -232,11 +241,26 @@ def add_scratch_message(session_id: str, turn_index: int, action_name: str, raw_
         cursor.execute("""
             INSERT INTO scratch_messages (session_id, turn_index, action_name, raw_payload, created_at)
             VALUES (?, ?, ?, ?, ?)
-        """, (session_id, turn_index, action_name, raw_payload, now := datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        """, (session_id, turn_index, action_name, raw_payload, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
         conn.commit()
+    finally:
+        conn.close()
+
+def execute_user_sql_query(query: str) -> List[Dict[str, Any]]:
+    """Executes validated SQL query against SQLite database."""
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(query)
+        if query.strip().upper().startswith("SELECT"):
+            rows = cursor.fetchall()
+            return [dict(r) for r in rows]
+        else:
+            conn.commit()
+            return [{"status": "success", "rows_affected": cursor.rowcount}]
     finally:
         conn.close()
 
 if __name__ == "__main__":
     init_db()
-    print("Database initialized successfully!")
+    print("Database initialized successfully with thersites_scratchpad table!")
