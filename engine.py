@@ -24,14 +24,12 @@ from console_logger import (
     INDICATOR_DONE, INDICATOR_THINKING, INDICATOR_BLOCKED
 )
 
-SYSTEM_CONTRACT = """You are Thersites, a contextually-challenged, error-prone, but deeply enthusiastic AI Intern.
-You work under "The Boss" and must ALWAYS respond with a structured JSON object containing your internal thoughts, user-facing content, and an array of actions.
-
-CRITICAL FORMATTING RULE: You MUST output raw valid JSON matching this exact structure:
+SYSTEM_CONTRACT = """You are Thersites, an enthusiastic junior AI intern for "The Boss".
+Always output RAW JSON matching this exact structure:
 
 {
-  "thought": "<your internal junior dev reasoning>",
-  "content": "<what you say to The Boss>",
+  "thought": "<internal junior dev reasoning>",
+  "content": "<message to The Boss>",
   "actions": [
     {
       "id": "act_1",
@@ -41,17 +39,15 @@ CRITICAL FORMATTING RULE: You MUST output raw valid JSON matching this exact str
   ]
 }
 
-Available Tools:
-1. `web_fetch`: params `{"url": "https://nu.nl"}`. (Fetches URL and extracts text. ONLY whitelisted URL is nu.nl).
-2. `write_to_file`: params `{"filepath": "C:/Dev/aiagent-thersites/sandbox/file.txt", "content": "..."}`.
-3. `read_file`: params `{"filepath": "C:/Dev/aiagent-thersites/sandbox/file.txt"}`.
-4. `delete_file`: params `{"filepath": "C:/Dev/aiagent-thersites/sandbox/file.txt"}`.
-5. `list_sandbox`: params `{"dirpath": "C:/Dev/aiagent-thersites/sandbox"}`.
-6. `write_to_scratchpad`: params `{"filepath": "scratchpad.md", "content": "..."}`.
-7. `sqlite_query_executor`: params `{"query": "SELECT * FROM thersites_scratchpad;"}`. (Read-only on project data tables, Full CRUD allowed ONLY on table 'thersites_scratchpad').
-8. `none` or empty actions `[]`: Signal that you have finished your work and are ready to deliver your final answer.
-
-CONTEXT RECOVERY RULE: If you sense you are missing specific file paths, requirements, or details mentioned earlier that might be outside your active 20k rolling context buffer, politely ask The Boss in your 'content' message to pin that earlier message or repeat the detail.
+Available Tools (Restricted strictly to C:/Dev/aiagent-thersites/sandbox):
+- `web_fetch`: {"url": "https://nu.nl"}
+- `write_to_file`: {"filepath": "C:/Dev/aiagent-thersites/sandbox/file.txt", "content": "..."}
+- `read_file`: {"filepath": "C:/Dev/aiagent-thersites/sandbox/file.txt"}
+- `delete_file`: {"filepath": "C:/Dev/aiagent-thersites/sandbox/file.txt"}
+- `list_sandbox`: {"dirpath": "C:/Dev/aiagent-thersites/sandbox"}
+- `write_to_scratchpad`: {"content": "..."}
+- `sqlite_query_executor`: {"query": "SELECT * FROM thersites_scratchpad;"} (Full CRUD on thersites_scratchpad only)
+- `none` or empty actions []: Signal work completion.
 """
 
 def extract_fuzzy_json(raw_text: str) -> Dict[str, Any]:
@@ -80,7 +76,6 @@ def extract_fuzzy_json(raw_text: str) -> Dict[str, Any]:
     return {"thought": thought, "content": content, "actions": actions}
 
 def clean_html_to_text(html_content: str, max_chars: int = 3000) -> str:
-    """Strips HTML tags, scripts, and styles into clean readable text in 0.01s."""
     text = re.sub(r'<script[^>]*>.*?</script>', '', html_content, flags=re.DOTALL | re.IGNORECASE)
     text = re.sub(r'<style[^>]*>.*?</style>', '', text, flags=re.DOTALL | re.IGNORECASE)
     text = re.sub(r'<[^>]+>', ' ', text)
@@ -88,7 +83,7 @@ def clean_html_to_text(html_content: str, max_chars: int = 3000) -> str:
     return text[:max_chars]
 
 def prewarm_ollama_model() -> bool:
-    """Instantly pre-loads model into VRAM on startup using empty messages array (6s)."""
+    """Pre-loads model into VRAM on startup using empty messages array (2s)."""
     native_url = f"{OLLAMA_BASE_URL.rstrip('/')}/api/chat"
     payload = {
         "model": MODEL_NAME,
@@ -116,7 +111,6 @@ def query_ollama(messages: List[Dict[str, str]], model: str = MODEL_NAME) -> Tup
     payload = {
         "model": model,
         "messages": messages,
-        "format": "json",
         "keep_alive": KEEP_AI_ALIVE,
         "options": {
             "num_ctx": NUM_CTX,
@@ -133,7 +127,7 @@ def query_ollama(messages: List[Dict[str, str]], model: str = MODEL_NAME) -> Tup
     }
     
     try:
-        response = requests.post(native_url, headers=headers, json=payload, timeout=120)
+        response = requests.post(native_url, headers=headers, json=payload, timeout=60)
         wall_time = time.time() - start_t
         if response.status_code == 200:
             data = response.json()
