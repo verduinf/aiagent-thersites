@@ -69,32 +69,14 @@ def extract_fuzzy_json(raw_text: str) -> Dict[str, Any]:
             
     return {"thought": thought, "content": content, "actions": actions}
 
-def detect_local_ollama_model() -> str:
-    """Discovers installed local Ollama models (e.g. qwen3.5:9b, qwen2.5:7b)."""
-    tags_url = f"{OLLAMA_BASE_URL.rstrip('/')}/api/tags"
-    try:
-        resp = requests.get(tags_url, timeout=3)
-        if resp.status_code == 200:
-            models = resp.json().get("models", [])
-            for m in models:
-                name = m.get("name", "").lower()
-                if "qwen" in name:
-                    return m["name"]
-            if models:
-                return models[0]["name"]
-    except Exception:
-        pass
-    return MODEL_NAME
-
-def query_ollama(messages: List[Dict[str, str]], model: str = None) -> str:
-    active_model = model or detect_local_ollama_model()
+def query_ollama(messages: List[Dict[str, str]], model: str = MODEL_NAME) -> str:
     base = OLLAMA_BASE_URL.rstrip('/')
     
     # 1. Try Native Ollama /api/chat Endpoint
     native_url = f"{base}/api/chat"
     headers = {"Content-Type": "application/json"}
     payload = {
-        "model": active_model,
+        "model": model,
         "messages": messages,
         "stream": False
     }
@@ -110,7 +92,7 @@ def query_ollama(messages: List[Dict[str, str]], model: str = None) -> str:
     # 2. Try OpenAI-compatible /v1/chat/completions Endpoint
     v1_url = f"{base}/v1/chat/completions"
     try:
-        response = requests.post(v1_url, headers=headers, json={"model": active_model, "messages": messages, "temperature": 0.7}, timeout=60)
+        response = requests.post(v1_url, headers=headers, json={"model": model, "messages": messages, "temperature": 0.7}, timeout=60)
         if response.status_code == 200:
             data = response.json()
             return data["choices"][0]["message"]["content"]
@@ -120,7 +102,7 @@ def query_ollama(messages: List[Dict[str, str]], model: str = None) -> str:
     # 3. Fallback Therp Simulation Output
     return json.dumps({
         "thought": "Ollama local inference unavailable or starting up.",
-        "content": f"[Therp Proxy Note]: Local Ollama model '{active_model}' is currently offline. Here is a simulated response to verify engine & UI workflow.",
+        "content": f"[Therp Proxy Note]: Local Ollama model '{model}' is currently offline. Here is a simulated response to verify engine & UI workflow.",
         "actions": []
     })
 

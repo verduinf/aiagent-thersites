@@ -26,7 +26,6 @@ SCRATCHPAD_PATH = BASE_DIR / "scratchpad.md"
 # LLM & Ollama Settings
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 MODEL_NAME = os.getenv("OLLAMA_MODEL", "qwen3.5:9b")
-FALLBACK_MODEL_NAME = os.getenv("OLLAMA_FALLBACK_MODEL", "qwen2.5:7b")
 
 # Context & Telemetry Limits
 ROLLING_BUFFER_CHAR_LIMIT = 20000
