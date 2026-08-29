@@ -1,6 +1,6 @@
 ﻿"""
 Dual-Loop Agentic Orchestrator & Ollama Client for AI Agent Thersites
-Handles prompt assembly, Turn-1 telemetry, fuzzy JSON parsing, fast HTML text extraction, and inner/outer execution loops.
+Handles prompt assembly, Turn-1 telemetry, fuzzy JSON parsing, fast HTML text extraction with link preservation, and inner/outer execution loops.
 """
 import os
 import re
@@ -40,7 +40,7 @@ Always output RAW JSON matching this exact structure:
 }
 
 Available Tools (Restricted strictly to C:/Dev/aiagent-thersites/sandbox):
-- `web_fetch`: {"url": "https://nu.nl"}
+- `web_fetch`: {"url": "https://nu.nl"} (Fetches any whitelisted nu.nl page or article URL)
 - `write_to_file`: {"filepath": "C:/Dev/aiagent-thersites/sandbox/file.txt", "content": "..."}
 - `read_file`: {"filepath": "C:/Dev/aiagent-thersites/sandbox/file.txt"}
 - `delete_file`: {"filepath": "C:/Dev/aiagent-thersites/sandbox/file.txt"}
@@ -75,9 +75,21 @@ def extract_fuzzy_json(raw_text: str) -> Dict[str, Any]:
             
     return {"thought": thought, "content": content, "actions": actions}
 
-def clean_html_to_text(html_content: str, max_chars: int = 3000) -> str:
+def clean_html_to_text(html_content: str, max_chars: int = 3500) -> str:
+    """Strips HTML noise while preserving headline article links in 0.01s."""
     text = re.sub(r'<script[^>]*>.*?</script>', '', html_content, flags=re.DOTALL | re.IGNORECASE)
     text = re.sub(r'<style[^>]*>.*?</style>', '', text, flags=re.DOTALL | re.IGNORECASE)
+    
+    def link_replacer(match):
+        href = match.group(1)
+        anchor_text = re.sub(r'<[^>]+>', ' ', match.group(2)).strip()
+        if href.startswith("/"):
+            href = f"https://nu.nl{href}"
+        if anchor_text and len(anchor_text) > 8 and not href.endswith(('.css', '.js', '.png', '.jpg', '.svg', '.gif')):
+            return f" [{anchor_text}]({href}) "
+        return f" {anchor_text} "
+        
+    text = re.sub(r'<a\s+[^>]*href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', link_replacer, text, flags=re.DOTALL | re.IGNORECASE)
     text = re.sub(r'<[^>]+>', ' ', text)
     text = re.sub(r'\s+', ' ', text).strip()
     return text[:max_chars]
@@ -182,8 +194,8 @@ def execute_tool_call(action: Dict[str, Any]) -> Dict[str, Any]:
             log_subagent("Web Fetcher", f"Fetching '{url}'...", INDICATOR_THINKING)
             resp = requests.get(url, timeout=10)
             raw_html = resp.text
-            clean_text = clean_html_to_text(raw_html, max_chars=3000)
-            log_subagent("Web Fetcher", f"Extracted {len(clean_text)} chars of text in 0.01s", INDICATOR_DONE)
+            clean_text = clean_html_to_text(raw_html, max_chars=3500)
+            log_subagent("Web Fetcher", f"Extracted {len(clean_text)} chars of text with article URLs in 0.01s", INDICATOR_DONE)
             return {"id": action_id, "tool": tool_name, "status": "success", "result": clean_text}
             
         elif tool_name == "write_to_file":
