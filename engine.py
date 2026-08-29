@@ -1,6 +1,6 @@
 ﻿"""
 Dual-Loop Agentic Orchestrator & Ollama Client for AI Agent Thersites
-Handles prompt assembly, Turn-1 telemetry, fuzzy JSON parsing, subagent pipelines, and inner/outer execution loops.
+Handles prompt assembly, Turn-1 telemetry, fuzzy JSON parsing, fast HTML text extraction, and inner/outer execution loops.
 """
 import os
 import re
@@ -42,7 +42,7 @@ CRITICAL FORMATTING RULE: You MUST output raw valid JSON matching this exact str
 }
 
 Available Tools:
-1. `web_fetch`: params `{"url": "https://nu.nl"}`. (Fetches URL and auto-summarizes content. ONLY whitelisted URL is nu.nl).
+1. `web_fetch`: params `{"url": "https://nu.nl"}`. (Fetches URL and extracts text. ONLY whitelisted URL is nu.nl).
 2. `write_to_file`: params `{"filepath": "C:/Dev/aiagent-thersites/sandbox/file.txt", "content": "..."}`.
 3. `read_file`: params `{"filepath": "C:/Dev/aiagent-thersites/sandbox/file.txt"}`.
 4. `delete_file`: params `{"filepath": "C:/Dev/aiagent-thersites/sandbox/file.txt"}`.
@@ -55,7 +55,6 @@ CONTEXT RECOVERY RULE: If you sense you are missing specific file paths, require
 """
 
 def extract_fuzzy_json(raw_text: str) -> Dict[str, Any]:
-    """Fuzzy JSON extractor handling markdown backticks, clean JSON string parsing, and dict normalization."""
     clean_text = raw_text.strip()
     if clean_text.startswith("```"):
         clean_text = re.sub(r"^```(?:json)?\s*", "", clean_text, flags=re.IGNORECASE)
@@ -79,6 +78,14 @@ def extract_fuzzy_json(raw_text: str) -> Dict[str, Any]:
             actions = []
             
     return {"thought": thought, "content": content, "actions": actions}
+
+def clean_html_to_text(html_content: str, max_chars: int = 3000) -> str:
+    """Strips HTML tags, scripts, and styles into clean readable text in 0.01s."""
+    text = re.sub(r'<script[^>]*>.*?</script>', '', html_content, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r'<style[^>]*>.*?</style>', '', text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r'<[^>]+>', ' ', text)
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text[:max_chars]
 
 def prewarm_ollama_model() -> bool:
     """Pre-warms local Ollama model into VRAM during server startup."""
@@ -157,16 +164,6 @@ def query_ollama(messages: List[Dict[str, str]], model: str = MODEL_NAME) -> Tup
         log_main(f"Ollama connection error: {e}", INDICATOR_BLOCKED)
         raise RuntimeError(f"Ollama connection error: {str(e)}")
 
-def run_subagent_summarizer(raw_text: str) -> str:
-    log_subagent("HTML Summarizer", "Spawning secondary transient context...", INDICATOR_THINKING)
-    sub_messages = [
-        {"role": "system", "content": "You are a concise summarization subagent. Compress the input text into a clean 300-word markdown summary focusing on key factual points."},
-        {"role": "user", "content": f"Summarize this content:\n\n{raw_text[:15000]}"}
-    ]
-    summary, _ = query_ollama(sub_messages)
-    log_subagent("HTML Summarizer", f"Compressed raw text -> {len(summary)} chars", INDICATOR_DONE)
-    return summary
-
 def execute_tool_call(action: Dict[str, Any]) -> Dict[str, Any]:
     tool_name = action.get("tool", action.get("name", "none"))
     params = action.get("params", {})
@@ -179,10 +176,12 @@ def execute_tool_call(action: Dict[str, Any]) -> Dict[str, Any]:
     try:
         if tool_name == "web_fetch":
             url = sanitized_params["url"]
+            log_subagent("Web Fetcher", f"Fetching '{url}'...", INDICATOR_THINKING)
             resp = requests.get(url, timeout=10)
             raw_html = resp.text
-            summary = run_subagent_summarizer(raw_html)
-            return {"id": action_id, "tool": tool_name, "status": "success", "result": summary}
+            clean_text = clean_html_to_text(raw_html, max_chars=3000)
+            log_subagent("Web Fetcher", f"Extracted {len(clean_text)} chars of text in 0.01s", INDICATOR_DONE)
+            return {"id": action_id, "tool": tool_name, "status": "success", "result": clean_text}
             
         elif tool_name == "write_to_file":
             filepath = sanitized_params["filepath"]

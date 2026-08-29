@@ -19,7 +19,7 @@ from database import (
     get_all_messages, add_scratch_message, cleanup_test_data
 )
 from warden import inspect_and_authorize, WardenViolation, validate_url, validate_write_path, validate_sql_query
-from engine import extract_fuzzy_json, run_subagent_summarizer
+from engine import extract_fuzzy_json, clean_html_to_text
 from config import SANDBOX_DIR
 
 class TestThersitesSuite(unittest.TestCase):
