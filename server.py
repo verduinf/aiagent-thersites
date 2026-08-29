@@ -13,7 +13,7 @@ from pydantic import BaseModel
 
 from config import STATIC_DIR, ROLLING_BUFFER_CHAR_LIMIT, PINNED_CONTEXT_CHAR_LIMIT, MODEL_NAME
 from database import (
-    init_db, get_or_create_active_session, get_recent_sessions,
+    init_db, cleanup_test_data, get_or_create_active_session, get_recent_sessions,
     create_session, set_active_session, get_all_messages,
     get_pinned_messages, get_rolling_messages, toggle_message_pin
 )
@@ -22,6 +22,7 @@ from engine import run_agent_inner_loop
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    cleanup_test_data()  # Purge any test-only messages on server startup
     yield
 
 app = FastAPI(title="AI Agent Thersites API", version="1.0.0", lifespan=lifespan)
