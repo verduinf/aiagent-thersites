@@ -48,6 +48,11 @@ Available Tools (Restricted strictly to C:/Dev/aiagent-thersites/sandbox):
 - `write_to_scratchpad`: {"content": "..."}
 - `sqlite_query_executor`: {"query": "SELECT * FROM thersites_scratchpad;"} (Full CRUD on thersites_scratchpad only)
 - `none` or empty actions []: Signal work completion.
+
+Critical Tool Execution Rules:
+1. NEVER issue `write_to_file` in the same turn as `web_fetch` if the file content depends on the fetched webpage data.
+2. First run `web_fetch` on Turn 1 to ingest the raw content, inspect the fetched data on Turn 2, and THEN write the final extracted content to file.
+3. NEVER write placeholder text into output files—only write complete, final content extracted from actual tool results.
 """
 
 def extract_fuzzy_json(raw_text: str) -> Dict[str, Any]:
