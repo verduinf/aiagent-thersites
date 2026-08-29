@@ -2,8 +2,10 @@
 FastAPI Server for AI Agent Thersites
 Provides REST & SSE Streaming API endpoints and serves the clean dark-mode Web UI.
 """
+import os
 import json
 import asyncio
+import subprocess
 from pathlib import Path
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Body
@@ -19,10 +21,24 @@ from database import (
 )
 from engine import run_agent_inner_loop
 
+def kill_existing_server_on_port(port: int = 8000):
+    """Terminates any previously running server process bound to port 8000."""
+    try:
+        cmd = f'powershell -Command "Get-NetTCPConnection -LocalPort {port} -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess"'
+        out = subprocess.check_output(cmd, shell=True).decode().strip()
+        my_pid = os.getpid()
+        for line in out.splitlines():
+            if line.isdigit():
+                pid = int(line)
+                if pid != my_pid:
+                    subprocess.run(f"taskkill /F /PID {pid}", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        pass
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
-    cleanup_test_data()  # Purge any test-only messages on server startup
+    cleanup_test_data()
     yield
 
 app = FastAPI(title="AI Agent Thersites API", version="1.0.0", lifespan=lifespan)
@@ -111,4 +127,5 @@ def chat_stream(request: ChatRequest):
 
 if __name__ == "__main__":
     import uvicorn
+    kill_existing_server_on_port(8000)
     uvicorn.run("server:app", host="127.0.0.1", port=8000, reload=True)
