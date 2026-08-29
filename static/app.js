@@ -23,7 +23,9 @@
     async function loadSessions() {
         try {
             const res = await fetch("/api/sessions");
-            const sessions = await res.json();
+            const rawData = await res.json();
+            const sessions = Array.isArray(rawData) ? rawData : (rawData.sessions || []);
+            
             sessionSelect.innerHTML = "";
             
             if (sessions.length === 0) {
