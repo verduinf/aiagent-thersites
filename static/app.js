@@ -1,58 +1,44 @@
-﻿document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", () => {
     const sessionSelect = document.getElementById("sessionSelect");
     const newSessionBtn = document.getElementById("newSessionBtn");
-    const timelineContainer = document.getElementById("timelineContainer");
-    const chatForm = document.getElementById("chatForm");
-    const promptInput = document.getElementById("promptInput");
-    const sendBtn = document.getElementById("sendBtn");
-    const accordionHeader = document.getElementById("accordionHeader");
-    const accordionBody = document.getElementById("accordionBody");
     const perfTag = document.getElementById("perfTag");
     const rollingBadge = document.getElementById("rollingBadge");
     const pinnedBadge = document.getElementById("pinnedBadge");
+    const pinnedContainer = document.getElementById("pinnedContainer");
+    const timelineContainer = document.getElementById("timelineContainer");
+    const scratchpadAccordion = document.getElementById("scratchpadAccordion");
+    const accordionHeader = document.getElementById("accordionHeader");
+    const accordionBody = document.getElementById("accordionBody");
+    const chatForm = document.getElementById("chatForm");
+    const promptInput = document.getElementById("promptInput");
+    const sendBtn = document.getElementById("sendBtn");
 
     let currentSessionId = null;
 
     async function initApp() {
         await loadSessions();
-        if (currentSessionId) {
+        if (sessionSelect.options.length > 0) {
+            currentSessionId = sessionSelect.value;
             await loadMessages(currentSessionId);
+        } else {
+            await createNewSession();
         }
     }
 
     async function loadSessions() {
         try {
             const res = await fetch("/api/sessions");
-            const rawData = await res.json();
-            const sessions = Array.isArray(rawData) ? rawData : (rawData.sessions || []);
-            const defaultActiveId = rawData.active_session_id || (sessions.length > 0 ? sessions[0].id : null);
-            
+            const sessions = await res.json();
             sessionSelect.innerHTML = "";
-            
-            if (sessions.length === 0) {
-                const newRes = await fetch("/api/sessions", { method: "POST" });
-                const newSess = await newRes.json();
-                currentSessionId = newSess.id;
-                sessions.push(newSess);
-            }
-            
-            if (!currentSessionId) {
-                currentSessionId = defaultActiveId;
-            }
-
             sessions.forEach(s => {
                 const opt = document.createElement("option");
                 opt.value = s.id;
-                const displayTitle = s.title && s.title !== s.id ? s.title : "Intern Session";
-                const countText = s.msg_count !== undefined ? `${s.msg_count} msgs` : "0 msgs";
-                opt.textContent = `${displayTitle} (${countText})`;
+                opt.textContent = `${s.id} (${s.created_at || 'New'})`;
                 sessionSelect.appendChild(opt);
             });
-
-            if (!currentSessionId && sessions.length > 0) {
-                currentSessionId = sessions[0].id;
+            if (currentSessionId) {
+                sessionSelect.value = currentSessionId;
             }
-            sessionSelect.value = currentSessionId;
         } catch (err) {
             console.error("Error loading sessions:", err);
         }
@@ -102,17 +88,17 @@
             
             const isUser = m.role === 'user';
             const author = isUser ? "The Boss" : "Thersites (Intern)";
-            const avatarIcon = isUser ? "👤" : "📜";
+            const avatarIcon = isUser ? "??" : "??";
             
             const isPinned = m.is_pinned === 1;
             const pinClass = isPinned ? "pinned" : "";
             
             let statusTagHtml = "";
             if (isPinned) {
-                statusTagHtml = `<span class="context-badge pinned" title="Pinned Anchor in System Contract">📌 Pinned Anchor</span>`;
+                statusTagHtml = `<span class="context-badge pinned" title="Pinned Anchor in System Contract">?? Pinned Anchor</span>`;
                 pinnedCharCount += m.content.length;
             } else {
-                statusTagHtml = `<span class="context-badge in-rolling" title="Active 20k Rolling Buffer">🟢 In 20k Window</span>`;
+                statusTagHtml = `<span class="context-badge in-rolling" title="Active 20k Rolling Buffer">?? In 20k Window</span>`;
                 rollingCharCount += m.content.length;
             }
 
@@ -126,7 +112,7 @@
                     <div class="message-actions">
                         <span class="seq-badge">Msg #${m.sequence_id}</span>
                         <span class="message-time">${m.created_at || ''}</span>
-                        <button class="pin-btn ${pinClass}" data-msg-id="${m.id}" title="Toggle Pin">📌</button>
+                        <button class="pin-btn ${pinClass}" data-msg-id="${m.id}" title="Toggle Pin">??</button>
                     </div>
                 </div>
                 <div class="message-body">${escapeHtml(m.content)}</div>
@@ -183,9 +169,11 @@
         promptInput.value = "";
         sendBtn.disabled = true;
         
-        accordionHeader.innerHTML = `<span class="accordion-title">🟡 Intern is thinking... (Turn 1/5)</span><span class="accordion-icon">▼</span>`;
-        accordionBody.innerHTML = `<div class="accordion-step"><span class="step-icon">🟡</span> Connecting to Ollama model...</div>`;
-        accordionBody.parentElement.classList.add("active");
+        // Show thought container and auto-expand on new prompt
+        scratchpadAccordion.classList.add("visible");
+        scratchpadAccordion.classList.remove("collapsed");
+        accordionHeader.innerHTML = `<span class="accordion-title">?? Intern is thinking... (Turn 1/8)</span><span class="accordion-icon">?</span>`;
+        accordionBody.innerHTML = `<div class="accordion-step"><span class="step-icon">??</span> Connecting to Ollama model...</div>`;
 
         let lastTurn = 1;
 
@@ -197,30 +185,34 @@
 
                 if (data.type === "telemetry") {
                     lastTurn = data.turn;
-                    accordionHeader.innerHTML = `<span class="accordion-title">🟡 Intern is thinking... (Turn ${data.turn}/${data.max_turns})</span><span class="accordion-icon">▼</span>`;
+                    const isCollapsed = scratchpadAccordion.classList.contains("collapsed");
+                    const icon = isCollapsed ? "?" : "?";
+                    accordionHeader.innerHTML = `<span class="accordion-title">?? Intern is thinking... (Turn ${data.turn}/${data.max_turns})</span><span class="accordion-icon">${icon}</span>`;
                 } else if (data.type === "performance") {
                     if (perfTag) {
-                        perfTag.textContent = `⚡ ${data.tok_per_sec} tok/s (${data.latency_sec}s)`;
+                        perfTag.textContent = `? ${data.tok_per_sec} tok/s (${data.latency_sec}s)`;
                     }
                 } else if (data.type === "scratch_step") {
                     const stepDiv = document.createElement("div");
                     stepDiv.className = "accordion-step";
                     
                     if (data.status === "error") {
-                        stepDiv.innerHTML = `<span class="step-icon">🔴</span> [Turn ${data.turn}] Details: ${escapeHtml(data.details)}`;
+                        stepDiv.innerHTML = `<span class="step-icon">??</span> [Turn ${data.turn}] Details: ${escapeHtml(data.details)}`;
                     } else {
                         let actionText = "";
                         if (data.actions && data.actions.length > 0) {
                             actionText = `<br><b>Action Requested:</b> <code>${escapeHtml(JSON.stringify(data.actions))}</code>`;
                         }
-                        stepDiv.innerHTML = `<span class="step-icon">🟢</span> [Turn ${data.turn}] <b>Thought:</b> ${escapeHtml(data.thought)}${actionText}`;
+                        stepDiv.innerHTML = `<span class="step-icon">??</span> [Turn ${data.turn}] <b>Thought:</b> ${escapeHtml(data.thought)}${actionText}`;
                     }
                     accordionBody.appendChild(stepDiv);
+                    accordionBody.scrollTop = accordionBody.scrollHeight;
                 } else if (data.type === "final_response") {
                     eventSource.close();
                     sendBtn.disabled = false;
-                    accordionHeader.innerHTML = `<span class="accordion-title">🟢 Intern task complete! (${lastTurn} turn${lastTurn > 1 ? 's' : ''})</span><span class="accordion-icon">▼</span>`;
-                    accordionBody.parentElement.classList.remove("active");
+                    const isCollapsed = scratchpadAccordion.classList.contains("collapsed");
+                    const icon = isCollapsed ? "?" : "?";
+                    accordionHeader.innerHTML = `<span class="accordion-title">?? Intern task complete! (${lastTurn} turn${lastTurn > 1 ? 's' : ''})</span><span class="accordion-icon">${icon}</span>`;
                     loadMessages(currentSessionId);
                 }
             };
@@ -229,7 +221,9 @@
                 console.error("SSE Error:", err);
                 eventSource.close();
                 sendBtn.disabled = false;
-                accordionHeader.innerHTML = `<span class="accordion-title">🔴 Task completed with error</span><span class="accordion-icon">▼</span>`;
+                const isCollapsed = scratchpadAccordion.classList.contains("collapsed");
+                const icon = isCollapsed ? "?" : "?";
+                accordionHeader.innerHTML = `<span class="accordion-title">?? Task completed with error</span><span class="accordion-icon">${icon}</span>`;
             };
 
         } catch (err) {
@@ -247,8 +241,13 @@
         createNewSession();
     });
 
+    // Accordion Header Toggle Handler: toggles .collapsed while preserving header title bar & arrow
     accordionHeader.addEventListener("click", () => {
-        accordionHeader.parentElement.classList.toggle("active");
+        const isCollapsed = scratchpadAccordion.classList.toggle("collapsed");
+        const iconSpan = accordionHeader.querySelector(".accordion-icon");
+        if (iconSpan) {
+            iconSpan.textContent = isCollapsed ? "?" : "?";
+        }
     });
 
     initApp();

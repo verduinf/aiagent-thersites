@@ -1,1 +1,1 @@
-Issue resolved: Follow-up link fetching enabled for nu.nl articles. Awaiting next assignment.
+Step Plan: 1) Fetch NU.nl headlines (web_fetch), 2) Write newbrief.txt (write_to_file), 3) Confirm file in sandbox
