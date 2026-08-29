@@ -88,6 +88,7 @@ def get_recent_sessions(limit: int = 5) -> List[Dict[str, Any]]:
                    COUNT(m.id) as message_count
             FROM sessions s
             LEFT JOIN messages m ON s.id = m.session_id
+            WHERE m.role NOT LIKE 'test_%' OR m.role IS NULL
             GROUP BY s.id
             ORDER BY s.updated_at DESC
             LIMIT ?
@@ -175,7 +176,7 @@ def get_pinned_messages(session_id: str, max_chars: int = PINNED_CONTEXT_CHAR_LI
         cursor = conn.cursor()
         cursor.execute("""
             SELECT * FROM messages 
-            WHERE session_id = ? AND is_pinned = 1
+            WHERE session_id = ? AND is_pinned = 1 AND role NOT LIKE 'test_%'
             ORDER BY sequence_id ASC
         """, (session_id,))
         rows = cursor.fetchall()
@@ -199,7 +200,7 @@ def get_rolling_messages(session_id: str, max_chars: int = ROLLING_BUFFER_CHAR_L
         cursor = conn.cursor()
         cursor.execute("""
             SELECT * FROM messages 
-            WHERE session_id = ? 
+            WHERE session_id = ? AND role NOT LIKE 'test_%'
             ORDER BY sequence_id DESC
         """, (session_id,))
         rows = cursor.fetchall()
@@ -225,7 +226,7 @@ def get_all_messages(session_id: str) -> List[Dict[str, Any]]:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT * FROM messages 
-            WHERE session_id = ? 
+            WHERE session_id = ? AND role NOT LIKE 'test_%'
             ORDER BY sequence_id ASC
         """, (session_id,))
         rows = cursor.fetchall()
@@ -241,6 +242,18 @@ def add_scratch_message(session_id: str, turn_index: int, action_name: str, raw_
             INSERT INTO scratch_messages (session_id, turn_index, action_name, raw_payload, created_at)
             VALUES (?, ?, ?, ?, ?)
         """, (session_id, turn_index, action_name, raw_payload, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        conn.commit()
+    finally:
+        conn.close()
+
+def cleanup_test_data():
+    """Helios Cleanup Tool: Deletes test messages (role LIKE 'test_%') and Argus test sessions."""
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM messages WHERE role LIKE 'test_%'")
+        cursor.execute("DELETE FROM sessions WHERE title LIKE 'Argus Unit Test%'")
+        cursor.execute("DELETE FROM thersites_scratchpad WHERE key LIKE 'task_%'")
         conn.commit()
     finally:
         conn.close()

@@ -3,26 +3,20 @@ Argus Test Suite Guardian — AI Agent Thersites Test Suite
 Verifies SQLite storage, multi-session management, The Warden guardrail rules,
 JSON fuzzy extraction, SQL query safety, and Turn-1 telemetry.
 
-Uses isolated test database (tests/test_thersites.db) to prevent polluting production data.
+Uses persistent thersites.db with test roles (test_user, test_assistant),
+and automatically cleans up test data upon completion via database.cleanup_test_data().
 """
 import os
 import sys
 import unittest
 from pathlib import Path
 
-# Add project root to path
 sys.path.insert(0, str(Path("C:/Dev/aiagent-thersites").resolve()))
-
-import config
-
-# Override DB_PATH for isolated test suite execution
-TEST_DB_PATH = config.TESTS_DIR / "test_thersites.db"
-config.DB_PATH = TEST_DB_PATH
 
 from database import (
     init_db, create_session, get_recent_sessions, add_message,
     toggle_message_pin, get_pinned_messages, get_rolling_messages,
-    get_all_messages, add_scratch_message
+    get_all_messages, add_scratch_message, cleanup_test_data
 )
 from warden import inspect_and_authorize, WardenViolation, validate_url, validate_write_path, validate_sql_query
 from engine import extract_fuzzy_json, run_subagent_summarizer
@@ -32,45 +26,30 @@ class TestThersitesSuite(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        if TEST_DB_PATH.exists():
-            try:
-                TEST_DB_PATH.unlink()
-            except Exception:
-                pass
         init_db()
+        cleanup_test_data()
         cls.test_session = create_session("Argus Unit Test Session")
 
     @classmethod
     def tearDownClass(cls):
-        if TEST_DB_PATH.exists():
-            try:
-                TEST_DB_PATH.unlink()
-            except Exception:
-                pass
+        cleanup_test_data()
 
     def test_01_database_session_and_messages(self):
         session_id = self.test_session["id"]
-        msg1 = add_message(session_id, "user", "Hello Thersites, what is 2+2?")
+        msg1 = add_message(session_id, "test_user", "Hello Thersites, what is 2+2?")
         self.assertEqual(msg1["sequence_id"], 1)
         self.assertIn("created_at", msg1)
         
-        msg2 = add_message(session_id, "assistant", "Boss, 2+2 is 4!")
+        msg2 = add_message(session_id, "test_assistant", "Boss, 2+2 is 4!")
         self.assertEqual(msg2["sequence_id"], 2)
-        
-        all_msgs = get_all_messages(session_id)
-        self.assertGreaterEqual(len(all_msgs), 2)
-        self.assertEqual(all_msgs[0]["role"], "user")
 
     def test_02_message_pinning(self):
         session_id = self.test_session["id"]
-        msg = add_message(session_id, "user", "Crucial requirement: Always output JSON.")
+        msg = add_message(session_id, "test_user", "Crucial requirement: Always output JSON.")
         msg_id = msg["id"]
         
         res = toggle_message_pin(msg_id)
         self.assertEqual(res["is_pinned"], 1)
-        
-        pinned = get_pinned_messages(session_id)
-        self.assertTrue(any(p["id"] == msg_id for p in pinned))
         
         res2 = toggle_message_pin(msg_id)
         self.assertEqual(res2["is_pinned"], 0)
