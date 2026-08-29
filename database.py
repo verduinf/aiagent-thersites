@@ -80,6 +80,13 @@ def create_session(session_id: Optional[str] = None, title: Optional[str] = None
         conn.commit()
         return {"id": session_id, "title": title, "created_at": now, "is_active": 1}
 
+def set_active_session(session_id: str) -> Dict[str, Any]:
+    with get_db_connection() as conn:
+        conn.execute("UPDATE sessions SET is_active = 0")
+        conn.execute("UPDATE sessions SET is_active = 1 WHERE id = ?", (session_id,))
+        conn.commit()
+        return {"id": session_id, "is_active": 1}
+
 def get_recent_sessions(limit: int = 20) -> List[Dict[str, Any]]:
     """Returns sessions ordered by the timestamp of their most recent message."""
     with get_db_connection() as conn:
