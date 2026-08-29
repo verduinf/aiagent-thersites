@@ -25,6 +25,7 @@
             const res = await fetch("/api/sessions");
             const rawData = await res.json();
             const sessions = Array.isArray(rawData) ? rawData : (rawData.sessions || []);
+            const defaultActiveId = rawData.active_session_id || (sessions.length > 0 ? sessions[0].id : null);
             
             sessionSelect.innerHTML = "";
             
@@ -35,15 +36,16 @@
                 sessions.push(newSess);
             }
             
+            if (!currentSessionId) {
+                currentSessionId = defaultActiveId;
+            }
+
             sessions.forEach(s => {
                 const opt = document.createElement("option");
                 opt.value = s.id;
                 const displayTitle = s.title && s.title !== s.id ? s.title : "Intern Session";
                 const countText = s.msg_count !== undefined ? `${s.msg_count} msgs` : "0 msgs";
                 opt.textContent = `${displayTitle} (${countText})`;
-                if (s.is_active && !currentSessionId) {
-                    currentSessionId = s.id;
-                }
                 sessionSelect.appendChild(opt);
             });
 
@@ -69,6 +71,7 @@
     }
 
     async function loadMessages(sessionId) {
+        if (!sessionId) return;
         try {
             const res = await fetch(`/api/messages?session_id=${sessionId}`);
             const messages = await res.json();
