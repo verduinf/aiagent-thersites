@@ -12,7 +12,7 @@ from typing import Dict, Any, List, Generator, Tuple
 from config import (
     OLLAMA_BASE_URL, MODEL_NAME, KEEP_AI_ALIVE, NUM_CTX,
     ROLLING_BUFFER_CHAR_LIMIT, PINNED_CONTEXT_CHAR_LIMIT,
-    MAX_INNER_LOOP_TURNS, SCRATCHPAD_PATH, SANDBOX_DIR
+    MAX_INNER_LOOP_TURNS, SCRATCHPAD_PATH, SANDBOX_DIR, VERBOSE
 )
 from database import (
     get_pinned_messages, get_rolling_messages, add_message,
@@ -20,7 +20,7 @@ from database import (
 )
 from warden import inspect_and_authorize
 from console_logger import (
-    log_main, log_subagent, log_telemetry, log_performance,
+    log_main, log_subagent, log_telemetry, log_performance, log_verbose,
     INDICATOR_DONE, INDICATOR_THINKING, INDICATOR_BLOCKED
 )
 
@@ -326,15 +326,19 @@ def run_agent_inner_loop(session_id: str, user_prompt: str) -> Generator[Dict[st
             actions = parsed["actions"]
             final_response = content or thought
         except Exception as json_err:
-            log_main(f"JSON Parse Error: {json_err}. Triggering self-correction retry.", INDICATOR_BLOCKED)
+            scratch_entry = add_scratch_message(session_id, turn, "json_parse_error", raw_output)
+            scratch_id = scratch_entry.get("id", "N/A")
+            
+            log_main(f"JSON Parse Error (Scratch Msg #{scratch_id}): {json_err}. Triggering self-correction retry.", INDICATOR_BLOCKED)
+            log_verbose(f"RAW LLM OUTPUT (Scratch Msg #{scratch_id})", raw_output)
+            
             scratch_history.append({"error": f"JSON Parse Error: {str(json_err)}. Output raw valid JSON only matching schema."})
-            add_scratch_message(session_id, turn, "json_parse_error", str(json_err))
             yield {
                 "type": "scratch_step",
                 "turn": turn,
                 "action": "json_retry",
                 "status": "error",
-                "details": f"JSON Parse Error: {str(json_err)}"
+                "details": f"JSON Parse Error (Scratch Msg #{scratch_id}): {str(json_err)}"
             }
             continue
             
