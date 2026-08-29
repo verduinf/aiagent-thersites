@@ -316,6 +316,9 @@ document.addEventListener("DOMContentLoaded", () => {
         if (iconSpan) {
             iconSpan.innerHTML = isCollapsed ? "&#9660;" : "&#9650;";
         }
+        setTimeout(() => {
+            timelineContainer.scrollTop = timelineContainer.scrollHeight;
+        }, 50);
     });
 
     initApp();
