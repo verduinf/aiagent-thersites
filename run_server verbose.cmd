@@ -1,4 +1,4 @@
-﻿@echo off
+@echo off
 echo ============================================================
 echo   AI Agent Thersites - Local Server Launcher
 echo   Model: Qwen3-9B (Ollama)
@@ -12,7 +12,7 @@ powershell -Command "Get-NetTCPConnection -LocalPort 8000 -ErrorAction SilentlyC
 echo Opening Web UI in browser...
 start http://127.0.0.1:8000
 
-echo Starting FastAPI Server (Verbose Mode: Enabled)...
+echo Starting FastAPI Server...
 python server.py --verbose
 
 pause
