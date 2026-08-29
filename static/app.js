@@ -1,274 +1,158 @@
-﻿/**
- * AI Agent Thersites — Clean Dark-Mode Web Client Logic
- */
-
-document.addEventListener("DOMContentLoaded", () => {
+﻿document.addEventListener("DOMContentLoaded", () => {
     const sessionSelect = document.getElementById("sessionSelect");
-    const btnNewSession = document.getElementById("btnNewSession");
-    const messagesContainer = document.getElementById("messagesContainer");
-    const pinnedList = document.getElementById("pinnedList");
-    const pinnedCount = document.getElementById("pinnedCount");
-    const msgCountBadge = document.getElementById("msgCountBadge");
-    const modelTag = document.getElementById("modelTag");
-    const perfTag = document.getElementById("perfTag");
-    const telemetryStatsText = document.getElementById("telemetryStatsText");
-    const telemetryProgressBar = document.getElementById("telemetryProgressBar");
+    const newSessionBtn = document.getElementById("newSessionBtn");
+    const timelineContainer = document.getElementById("timelineContainer");
+    const chatForm = document.getElementById("chatForm");
     const promptInput = document.getElementById("promptInput");
-    const btnSend = document.getElementById("btnSend");
-    
-    const liveScratchAccordion = document.getElementById("liveScratchAccordion");
-    const liveScratchTitle = document.getElementById("liveScratchTitle");
-    const liveScratchContent = document.getElementById("liveScratchContent");
+    const sendBtn = document.getElementById("sendBtn");
+    const accordionHeader = document.getElementById("accordionHeader");
+    const accordionBody = document.getElementById("accordionBody");
+    const perfTag = document.getElementById("perfTag");
+    const rollingBadge = document.getElementById("rollingBadge");
+    const pinnedBadge = document.getElementById("pinnedBadge");
 
     let currentSessionId = null;
 
-    async function init() {
+    async function initApp() {
         await loadSessions();
-        await loadMessages();
+        if (currentSessionId) {
+            await loadMessages(currentSessionId);
+        }
     }
 
     async function loadSessions() {
         try {
             const res = await fetch("/api/sessions");
-            const data = await res.json();
-            currentSessionId = data.active_session_id;
-
+            const sessions = await res.json();
             sessionSelect.innerHTML = "";
-            data.sessions.forEach(s => {
+            
+            if (sessions.length === 0) {
+                const newRes = await fetch("/api/sessions", { method: "POST" });
+                const newSess = await newRes.json();
+                currentSessionId = newSess.id;
+                sessions.push(newSess);
+            }
+            
+            sessions.forEach(s => {
                 const opt = document.createElement("option");
                 opt.value = s.id;
-                opt.textContent = `${s.title} (${s.message_count} msgs)`;
-                if (s.id === currentSessionId) opt.selected = true;
+                const shortId = s.id.length > 25 ? s.id.substring(0, 25) + "..." : s.id;
+                opt.textContent = `${shortId} (${s.is_active ? 'Active' : 'Saved'})`;
+                if (s.is_active && !currentSessionId) {
+                    currentSessionId = s.id;
+                }
                 sessionSelect.appendChild(opt);
             });
+
+            if (!currentSessionId && sessions.length > 0) {
+                currentSessionId = sessions[0].id;
+            }
+            sessionSelect.value = currentSessionId;
         } catch (err) {
             console.error("Error loading sessions:", err);
         }
     }
 
-    async function loadMessages() {
+    async function createNewSession() {
         try {
-            const res = await fetch("/api/messages");
-            const data = await res.json();
-            
-            modelTag.textContent = data.model_name || "qwen3.5:9b";
-            renderMessages(data.messages, data.active_rolling_ids || [], data.pinned_ids || []);
-            renderPinned(data.pinned_messages, data.telemetry.pinned_chars, data.telemetry.pinned_limit);
-            updateTelemetryBar(data.telemetry.rolling_chars, data.telemetry.rolling_limit, data.telemetry.pinned_chars, data.telemetry.pinned_limit);
+            const res = await fetch("/api/sessions", { method: "POST" });
+            const newSess = await res.json();
+            currentSessionId = newSess.id;
+            await loadSessions();
+            await loadMessages(currentSessionId);
+        } catch (err) {
+            console.error("Error creating session:", err);
+        }
+    }
+
+    async function loadMessages(sessionId) {
+        try {
+            const res = await fetch(`/api/messages?session_id=${sessionId}`);
+            const messages = await res.json();
+            renderTimeline(messages);
         } catch (err) {
             console.error("Error loading messages:", err);
         }
     }
 
-    function renderMessages(messages, activeRollingIds, pinnedIds) {
-        messagesContainer.innerHTML = "";
-        msgCountBadge.textContent = `${messages.length} messages`;
-
-        if (messages.length === 0) {
+    function renderTimeline(messages) {
+        timelineContainer.innerHTML = "";
+        if (!messages || messages.length === 0) {
+            timelineContainer.innerHTML = `
+                <div style="text-align: center; color: var(--text-muted); padding: 40px;">
+                    <p>No messages yet. Send a prompt to Thersites to begin!</p>
+                </div>
+            `;
+            updateContextBadges([]);
             return;
         }
 
-        messages.forEach(msg => {
+        let rollingCharCount = 0;
+        let pinnedCharCount = 0;
+
+        messages.forEach(m => {
             const card = document.createElement("div");
-            const isUser = msg.role === "user";
-            card.className = `message-card ${isUser ? 'user-message' : 'assistant-message'}`;
-
-            const avatar = isUser ? "👤" : "📜";
-            const roleName = isUser ? "The Boss" : "Thersites (Intern)";
-
-            const isPinned = pinnedIds.includes(msg.id) || msg.is_pinned === 1;
-            const isInRolling = activeRollingIds.includes(msg.id);
-
-            let statusBadgeHtml = "";
+            card.className = `message-card ${m.role === 'user' ? 'role-user' : 'role-assistant'}`;
+            
+            const isUser = m.role === 'user';
+            const author = isUser ? "The Boss" : "Thersites (Intern)";
+            const avatarIcon = isUser ? "👤" : "📜";
+            
+            const isPinned = m.is_pinned === 1;
+            const pinClass = isPinned ? "pinned" : "";
+            
+            let statusTagHtml = "";
             if (isPinned) {
-                statusBadgeHtml = `<span class="context-status-badge pinned">📌 Pinned Anchor</span>`;
-            } else if (isInRolling) {
-                statusBadgeHtml = `<span class="context-status-badge in-rolling">🟢 In 20k Window</span>`;
+                statusTagHtml = `<span class="context-badge pinned" title="Pinned Anchor in System Contract">📌 Pinned Anchor</span>`;
+                pinnedCharCount += m.content.length;
             } else {
-                statusBadgeHtml = `<span class="context-status-badge historic">📜 Historic History</span>`;
+                statusTagHtml = `<span class="context-badge in-rolling" title="Active 20k Rolling Buffer">🟢 In 20k Window</span>`;
+                rollingCharCount += m.content.length;
             }
 
             card.innerHTML = `
-                <div class="avatar">${avatar}</div>
-                <div class="message-bubble">
-                    <div class="message-meta">
-                        <div>
-                            <span class="role-name">${roleName}</span>
-                            ${statusBadgeHtml}
-                        </div>
-                        <div class="meta-details">
-                            <span class="seq-badge">Msg #${msg.sequence_id}</span>
-                            <span class="timestamp">${msg.created_at}</span>
-                            <button class="pin-btn ${isPinned ? 'pinned' : ''}" data-id="${msg.id}" title="Toggle Pinned Context">
-                                ${isPinned ? '📌 Pinned' : '📌'}
-                            </button>
-                        </div>
+                <div class="message-header">
+                    <div class="message-author">
+                        <span class="message-avatar">${avatarIcon}</span>
+                        <span>${author}</span>
+                        ${statusTagHtml}
                     </div>
-                    <div class="message-text">${escapeHtml(msg.content)}</div>
+                    <div class="message-actions">
+                        <span class="seq-badge">Msg #${m.sequence_id}</span>
+                        <span class="message-time">${m.created_at || ''}</span>
+                        <button class="pin-btn ${pinClass}" data-msg-id="${m.id}" title="Toggle Pin">📌</button>
+                    </div>
                 </div>
+                <div class="message-body">${escapeHtml(m.content)}</div>
             `;
 
-            const pinBtn = card.querySelector(".pin-btn");
-            pinBtn.addEventListener("click", () => togglePin(msg.id));
-
-            messagesContainer.appendChild(card);
+            timelineContainer.appendChild(card);
         });
 
-        messagesContainer.scrollTop = messagesContainer.scrollHeight;
-    }
+        rollingBadge.textContent = `Rolling: ${rollingCharCount.toLocaleString()} / 20k`;
+        pinnedBadge.textContent = `Pinned: ${pinnedCharCount.toLocaleString()} / 5k`;
 
-    function renderPinned(pinnedMsgs, pinnedChars, pinnedLimit) {
-        pinnedCount.textContent = `${pinnedChars.toLocaleString()} / ${pinnedLimit.toLocaleString()} chars`;
-        pinnedList.innerHTML = "";
-
-        if (pinnedMsgs.length === 0) {
-            pinnedList.innerHTML = `
-                <div class="empty-pinned-state">
-                    <p>No pinned context anchors.</p>
-                </div>
-            `;
-            return;
-        }
-
-        pinnedMsgs.forEach(msg => {
-            const card = document.createElement("div");
-            card.className = "pinned-card";
-            card.innerHTML = `
-                <div class="pinned-card-header">
-                    <span>Msg #${msg.sequence_id} • ${msg.created_at.split(' ')[1]}</span>
-                    <button class="unpin-btn" data-id="${msg.id}" title="Unpin">✖</button>
-                </div>
-                <div class="pinned-card-content">${escapeHtml(msg.content)}</div>
-            `;
-
-            card.querySelector(".unpin-btn").addEventListener("click", () => togglePin(msg.id));
-            pinnedList.appendChild(card);
+        document.querySelectorAll(".pin-btn").forEach(btn => {
+            btn.addEventListener("click", async (e) => {
+                const msgId = e.target.getAttribute("data-msg-id");
+                await togglePin(msgId);
+            });
         });
+
+        timelineContainer.scrollTop = timelineContainer.scrollHeight;
     }
 
-    function updateTelemetryBar(rollingChars, rollingLimit, pinnedChars, pinnedLimit) {
-        telemetryStatsText.textContent = `Rolling: ${rollingChars.toLocaleString()} / 20k | Pinned: ${pinnedChars.toLocaleString()} / 5k`;
-        const percentage = Math.min(100, Math.round((rollingChars / rollingLimit) * 100));
-        telemetryProgressBar.style.width = `${Math.max(5, percentage)}%`;
-    }
-
-    async function togglePin(messageId) {
+    async function togglePin(msgId) {
         try {
-            await fetch(`/api/pin/${messageId}`, { method: "POST" });
-            await loadMessages();
+            await fetch(`/api/messages/${msgId}/pin`, { method: "POST" });
+            await loadMessages(currentSessionId);
         } catch (err) {
             console.error("Error toggling pin:", err);
         }
     }
 
-    sessionSelect.addEventListener("change", async (e) => {
-        const newSessionId = e.target.value;
-        try {
-            await fetch("/api/sessions/active", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ session_id: newSessionId })
-            });
-            await loadMessages();
-        } catch (err) {
-            console.error("Error switching session:", err);
-        }
-    });
-
-    btnNewSession.addEventListener("click", async () => {
-        const title = prompt("Enter Title for New Session:", `Session ${new Date().toLocaleTimeString()}`);
-        if (!title) return;
-
-        try {
-            await fetch("/api/sessions", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ title })
-            });
-            await init();
-        } catch (err) {
-            console.error("Error creating session:", err);
-        }
-    });
-
-    async function sendTask() {
-        const promptText = promptInput.value.trim();
-        if (!promptText) return;
-
-        promptInput.value = "";
-        btnSend.disabled = true;
-
-        liveScratchAccordion.classList.remove("hidden");
-        liveScratchTitle.textContent = "Intern is thinking... (Turn 1/5)";
-        liveScratchContent.textContent = "Connecting to Ollama model...";
-
-        try {
-            const response = await fetch("/api/chat", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ prompt: promptText })
-            });
-
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder("utf-8");
-            let buffer = "";
-
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-
-                buffer += decoder.decode(value, { stream: true });
-                const lines = buffer.split("\n\n");
-                buffer = lines.pop();
-
-                for (const line of lines) {
-                    if (line.startsWith("data: ")) {
-                        const eventData = JSON.parse(line.slice(6));
-                        handleSSEEvent(eventData);
-                    }
-                }
-            }
-        } catch (err) {
-            console.error("SSE Chat Error:", err);
-            liveScratchContent.textContent += `\nError: ${err.message}`;
-        } finally {
-            liveScratchAccordion.classList.add("hidden");
-            btnSend.disabled = false;
-            await loadMessages();
-        }
-    }
-
-    function handleSSEEvent(event) {
-        if (event.type === "telemetry") {
-            liveScratchTitle.textContent = `Intern is thinking... (Turn ${event.turn}/${event.max_turns})`;
-            updateTelemetryBar(event.char_count, event.max_chars, 0, 5000);
-        } else if (event.type === "performance") {
-            if (event.tok_per_sec > 0) {
-                perfTag.textContent = `${event.tok_per_sec} tok/s (${event.latency_sec}s)`;
-            }
-        } else if (event.type === "scratch_step") {
-            let logText = `[Turn ${event.turn}] `;
-            if (event.thought) logText += `Thought: ${event.thought}\n`;
-            if (event.actions && event.actions.length > 0) {
-                logText += `Action Requested: ${JSON.stringify(event.actions)}\n`;
-            }
-            if (event.details) logText += `Details: ${event.details}\n`;
-            liveScratchContent.textContent += logText + "\n";
-        } else if (event.type === "final_response") {
-            liveScratchTitle.textContent = "Intern completed task! 🟢 [DONE]";
-        }
-    }
-
-    btnSend.addEventListener("click", sendTask);
-    promptInput.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
-            sendTask();
-        }
-    });
-
-    function escapeHtml(str) {
-        return str
+    function escapeHtml(text) {
+        return text
             .replace(/&/g, "&amp;")
             .replace(/</g, "&lt;")
             .replace(/>/g, "&gt;")
@@ -276,5 +160,79 @@ document.addEventListener("DOMContentLoaded", () => {
             .replace(/'/g, "&#039;");
     }
 
-    init();
+    function updateContextBadges(messages) {
+        rollingBadge.textContent = "Rolling: 0 / 20k";
+        pinnedBadge.textContent = "Pinned: 0 / 5k";
+    }
+
+    chatForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const prompt = promptInput.value.trim();
+        if (!prompt) return;
+
+        promptInput.value = "";
+        sendBtn.disabled = true;
+        
+        accordionBody.innerHTML = `<div class="accordion-step"><span class="step-icon">🟡</span> Connecting to Ollama model...</div>`;
+        accordionBody.parentElement.classList.add("active");
+
+        try {
+            const eventSource = new EventSource(`/api/chat/stream?session_id=${currentSessionId}&prompt=${encodeURIComponent(prompt)}`);
+
+            eventSource.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+
+                if (data.type === "telemetry") {
+                    // Handled live
+                } else if (data.type === "performance") {
+                    if (perfTag) {
+                        perfTag.textContent = `⚡ ${data.tok_per_sec} tok/s (${data.latency_sec}s)`;
+                    }
+                } else if (data.type === "scratch_step") {
+                    const stepDiv = document.createElement("div");
+                    stepDiv.className = "accordion-step";
+                    
+                    if (data.status === "error") {
+                        stepDiv.innerHTML = `<span class="step-icon">🔴</span> [Turn ${data.turn}] Details: ${escapeHtml(data.details)}`;
+                    } else {
+                        let actionText = "";
+                        if (data.actions && data.actions.length > 0) {
+                            actionText = `<br><b>Action Requested:</b> <code>${escapeHtml(JSON.stringify(data.actions))}</code>`;
+                        }
+                        stepDiv.innerHTML = `<span class="step-icon">🟢</span> [Turn ${data.turn}] <b>Thought:</b> ${escapeHtml(data.thought)}${actionText}`;
+                    }
+                    accordionBody.appendChild(stepDiv);
+                } else if (data.type === "final_response") {
+                    eventSource.close();
+                    sendBtn.disabled = false;
+                    loadMessages(currentSessionId);
+                }
+            };
+
+            eventSource.onerror = (err) => {
+                console.error("SSE Error:", err);
+                eventSource.close();
+                sendBtn.disabled = false;
+            };
+
+        } catch (err) {
+            console.error("Chat Submit Error:", err);
+            sendBtn.disabled = false;
+        }
+    });
+
+    sessionSelect.addEventListener("change", (e) => {
+        currentSessionId = e.target.value;
+        loadMessages(currentSessionId);
+    });
+
+    newSessionBtn.addEventListener("click", () => {
+        createNewSession();
+    });
+
+    accordionHeader.addEventListener("click", () => {
+        accordionHeader.parentElement.classList.toggle("active");
+    });
+
+    initApp();
 });

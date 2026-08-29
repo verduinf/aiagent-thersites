@@ -1,273 +1,228 @@
 ﻿"""
-SQLite Persistence Layer for AI Agent Thersites
-Handles session management, user-facing episodic memory, pinned context, and transient scratch messages.
+SQLite Database Operations for AI Agent Thersites
+Handles session persistence, episodic message storage, sequence ordering, and rolling/pinned context queries.
+Excludes test_% roles from user-facing context and provides test cleanup utilities.
 """
 import sqlite3
-from datetime import datetime
+import os
+import time
 from typing import List, Dict, Any, Optional
-from config import DB_PATH, ROLLING_BUFFER_CHAR_LIMIT, PINNED_CONTEXT_CHAR_LIMIT
+from pathlib import Path
+from config import DB_PATH
 
-def get_connection() -> sqlite3.Connection:
-    conn = sqlite3.connect(str(DB_PATH))
+def get_db_connection():
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
 def init_db():
-    conn = get_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("""
+    with get_db_connection() as conn:
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS sessions (
                 id TEXT PRIMARY KEY,
-                title TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                is_active INTEGER DEFAULT 0
+                title TEXT DEFAULT 'New Session',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                is_active INTEGER DEFAULT 1
             )
         """)
-        cursor.execute("""
+        
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 session_id TEXT NOT NULL,
                 sequence_id INTEGER NOT NULL,
                 role TEXT NOT NULL,
                 content TEXT NOT NULL,
-                created_at TEXT NOT NULL,
                 is_pinned INTEGER DEFAULT 0,
-                token_estimate INTEGER DEFAULT 0,
-                FOREIGN KEY (session_id) REFERENCES sessions (id)
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (session_id) REFERENCES sessions(id)
             )
         """)
-        cursor.execute("""
+        
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS thersites_scratchpad (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                key TEXT UNIQUE NOT NULL,
+                value TEXT NOT NULL,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS scratch_messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 session_id TEXT NOT NULL,
                 turn_index INTEGER NOT NULL,
                 action_name TEXT,
                 raw_payload TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                FOREIGN KEY (session_id) REFERENCES sessions (id)
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (session_id) REFERENCES sessions(id)
             )
         """)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS thersites_scratchpad (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                key TEXT UNIQUE NOT NULL,
-                value TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            )
-        """)
-        conn.commit()
-    finally:
-        conn.close()
         
-    get_or_create_active_session()
-
-def create_session(title: str = "New Session") -> Dict[str, Any]:
-    session_id = f"session_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    conn = get_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("UPDATE sessions SET is_active = 0")
-        cursor.execute("""
-            INSERT INTO sessions (id, title, created_at, updated_at, is_active)
-            VALUES (?, ?, ?, ?, 1)
-        """, (session_id, title, now, now))
         conn.commit()
-    finally:
-        conn.close()
-    return {"id": session_id, "title": title, "created_at": now, "updated_at": now, "is_active": 1}
 
-def get_recent_sessions(limit: int = 5) -> List[Dict[str, Any]]:
-    conn = get_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT s.id, s.title, s.created_at, s.updated_at, s.is_active,
-                   COUNT(m.id) as message_count
+def create_session(session_id: Optional[str] = None, title: Optional[str] = None) -> Dict[str, Any]:
+    with get_db_connection() as conn:
+        conn.execute("UPDATE sessions SET is_active = 0")
+        now = time.strftime("%Y-%m-%d %H:%M:%S")
+        if not session_id:
+            session_id = f"session_{time.strftime('%Y%m%d_%H%M%S')}_{os.urandom(3).hex()}"
+        if not title:
+            title = session_id
+            
+        conn.execute(
+            "INSERT INTO sessions (id, title, created_at, updated_at, is_active) VALUES (?, ?, ?, ?, 1)",
+            (session_id, title, now, now)
+        )
+        conn.commit()
+        return {"id": session_id, "title": title, "created_at": now, "is_active": 1}
+
+def get_recent_sessions(limit: int = 20) -> List[Dict[str, Any]]:
+    """Returns sessions ordered by the timestamp of their most recent message."""
+    with get_db_connection() as conn:
+        rows = conn.execute("""
+            SELECT s.id, s.title, s.created_at, s.is_active, 
+                   COALESCE(MAX(m.created_at), s.created_at) as last_activity
             FROM sessions s
-            LEFT JOIN messages m ON s.id = m.session_id
-            WHERE m.role NOT LIKE 'test_%' OR m.role IS NULL
+            LEFT JOIN messages m ON s.id = m.session_id AND m.role NOT LIKE 'test_%'
             GROUP BY s.id
-            ORDER BY s.updated_at DESC
+            ORDER BY last_activity DESC
             LIMIT ?
-        """, (limit,))
-        rows = cursor.fetchall()
-        return [dict(row) for row in rows]
-    finally:
-        conn.close()
+        """, (limit,)).fetchall()
+        return [dict(r) for r in rows]
 
 def get_or_create_active_session() -> Dict[str, Any]:
-    conn = get_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM sessions WHERE is_active = 1 LIMIT 1")
-        row = cursor.fetchone()
-        if row:
-            return dict(row)
-    finally:
-        conn.close()
+    """Returns the session with the most recent message, ensuring it is set active."""
+    with get_db_connection() as conn:
+        active = conn.execute("""
+            SELECT s.id, s.title, s.created_at, s.is_active,
+                   COALESCE(MAX(m.created_at), s.created_at) as last_activity
+            FROM sessions s
+            LEFT JOIN messages m ON s.id = m.session_id AND m.role NOT LIKE 'test_%'
+            GROUP BY s.id
+            ORDER BY last_activity DESC
+            LIMIT 1
+        """).fetchone()
         
-    return create_session(title="Initial Intern Session")
+        if active:
+            active_dict = dict(active)
+            conn.execute("UPDATE sessions SET is_active = 0")
+            conn.execute("UPDATE sessions SET is_active = 1 WHERE id = ?", (active_dict["id"],))
+            conn.commit()
+            active_dict["is_active"] = 1
+            return active_dict
+            
+        return create_session()
 
-def set_active_session(session_id: str) -> bool:
-    conn = get_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("UPDATE sessions SET is_active = 0")
-        cursor.execute("UPDATE sessions SET is_active = 1 WHERE id = ?", (session_id,))
-        conn.commit()
-        return cursor.rowcount > 0
-    finally:
-        conn.close()
-
-def add_message(session_id: str, role: str, content: str, is_pinned: int = 0) -> Dict[str, Any]:
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    conn = get_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM messages WHERE session_id = ?", (session_id,))
-        count = cursor.fetchone()[0]
-        sequence_id = count + 1
-        token_estimate = len(content) // 4
+def add_message(session_id: str, role: str, content: str) -> Dict[str, Any]:
+    with get_db_connection() as conn:
+        now = time.strftime("%Y-%m-%d %H:%M:%S")
+        seq_row = conn.execute(
+            "SELECT COALESCE(MAX(sequence_id), 0) + 1 as next_seq FROM messages WHERE session_id = ?",
+            (session_id,)
+        ).fetchone()
+        next_seq = seq_row["next_seq"]
         
-        cursor.execute("""
-            INSERT INTO messages (session_id, sequence_id, role, content, created_at, is_pinned, token_estimate)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (session_id, sequence_id, role, content, now, is_pinned, token_estimate))
-        
+        cursor = conn.execute(
+            """INSERT INTO messages (session_id, sequence_id, role, content, is_pinned, created_at)
+               VALUES (?, ?, ?, ?, 0, ?)""",
+            (session_id, next_seq, role, content, now)
+        )
         msg_id = cursor.lastrowid
-        cursor.execute("UPDATE sessions SET updated_at = ? WHERE id = ?", (now, session_id))
         conn.commit()
         
-        return {
-            "id": msg_id,
-            "session_id": session_id,
-            "sequence_id": sequence_id,
-            "role": role,
-            "content": content,
-            "created_at": now,
-            "is_pinned": is_pinned,
-            "token_estimate": token_estimate
-        }
-    finally:
-        conn.close()
+        msg = conn.execute("SELECT * FROM messages WHERE id = ?", (msg_id,)).fetchone()
+        return dict(msg)
 
 def toggle_message_pin(message_id: int) -> Dict[str, Any]:
-    conn = get_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("SELECT is_pinned FROM messages WHERE id = ?", (message_id,))
-        row = cursor.fetchone()
-        if not row:
-            return {"status": "error", "message": "Message not found"}
-        
-        new_state = 1 if row["is_pinned"] == 0 else 0
-        cursor.execute("UPDATE messages SET is_pinned = ? WHERE id = ?", (new_state, message_id))
+    with get_db_connection() as conn:
+        current = conn.execute("SELECT is_pinned FROM messages WHERE id = ?", (message_id,)).fetchone()
+        if not current:
+            raise ValueError(f"Message ID {message_id} not found.")
+            
+        new_pinned = 0 if current["is_pinned"] == 1 else 1
+        conn.execute("UPDATE messages SET is_pinned = ? WHERE id = ?", (new_pinned, message_id))
         conn.commit()
-        return {"status": "success", "message_id": message_id, "is_pinned": new_state}
-    finally:
-        conn.close()
+        
+        updated = conn.execute("SELECT * FROM messages WHERE id = ?", (message_id,)).fetchone()
+        return dict(updated)
 
-def get_pinned_messages(session_id: str, max_chars: int = PINNED_CONTEXT_CHAR_LIMIT) -> List[Dict[str, Any]]:
-    conn = get_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("""
+def get_pinned_messages(session_id: str, char_limit: int = 5000) -> List[Dict[str, Any]]:
+    with get_db_connection() as conn:
+        rows = conn.execute("""
             SELECT * FROM messages 
             WHERE session_id = ? AND is_pinned = 1 AND role NOT LIKE 'test_%'
             ORDER BY sequence_id ASC
-        """, (session_id,))
-        rows = cursor.fetchall()
+        """, (session_id,)).fetchall()
         
-        results = []
-        total_chars = 0
+        pinned = []
+        acc_chars = 0
         for r in rows:
-            d = dict(r)
-            if total_chars + len(d["content"]) <= max_chars:
-                results.append(d)
-                total_chars += len(d["content"])
+            content_len = len(r["content"])
+            if acc_chars + content_len <= char_limit:
+                pinned.append(dict(r))
+                acc_chars += content_len
             else:
                 break
-        return results
-    finally:
-        conn.close()
+        return pinned
 
-def get_rolling_messages(session_id: str, max_chars: int = ROLLING_BUFFER_CHAR_LIMIT) -> List[Dict[str, Any]]:
-    conn = get_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("""
+def get_rolling_messages(session_id: str, char_limit: int = 20000) -> List[Dict[str, Any]]:
+    with get_db_connection() as conn:
+        rows = conn.execute("""
             SELECT * FROM messages 
-            WHERE session_id = ? AND role NOT LIKE 'test_%'
+            WHERE session_id = ? AND is_pinned = 0 AND role NOT LIKE 'test_%'
             ORDER BY sequence_id DESC
-        """, (session_id,))
-        rows = cursor.fetchall()
+        """, (session_id,)).fetchall()
         
-        selected = []
-        total_chars = 0
+        rolling_rev = []
+        acc_chars = 0
         for r in rows:
-            d = dict(r)
-            if total_chars + len(d["content"]) <= max_chars:
-                selected.append(d)
-                total_chars += len(d["content"])
+            content_len = len(r["content"])
+            if acc_chars + content_len <= char_limit:
+                rolling_rev.append(dict(r))
+                acc_chars += content_len
             else:
                 break
                 
-        selected.reverse()
-        return selected
-    finally:
-        conn.close()
+        rolling_rev.reverse()
+        return rolling_rev
 
 def get_all_messages(session_id: str) -> List[Dict[str, Any]]:
-    conn = get_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("""
+    with get_db_connection() as conn:
+        rows = conn.execute("""
             SELECT * FROM messages 
             WHERE session_id = ? AND role NOT LIKE 'test_%'
             ORDER BY sequence_id ASC
-        """, (session_id,))
-        rows = cursor.fetchall()
+        """, (session_id,)).fetchall()
         return [dict(r) for r in rows]
-    finally:
-        conn.close()
 
-def add_scratch_message(session_id: str, turn_index: int, action_name: str, raw_payload: str):
-    conn = get_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("""
+def add_scratch_message(session_id: str, turn_index: int, action_name: str, raw_payload: str) -> Dict[str, Any]:
+    with get_db_connection() as conn:
+        now = time.strftime("%Y-%m-%d %H:%M:%S")
+        cursor = conn.execute("""
             INSERT INTO scratch_messages (session_id, turn_index, action_name, raw_payload, created_at)
             VALUES (?, ?, ?, ?, ?)
-        """, (session_id, turn_index, action_name, raw_payload, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        """, (session_id, turn_index, action_name, raw_payload, now))
+        row_id = cursor.lastrowid
         conn.commit()
-    finally:
-        conn.close()
+        return {"id": row_id, "session_id": session_id, "turn_index": turn_index, "action_name": action_name}
 
-def cleanup_test_data():
-    """Helios Cleanup Tool: Deletes test messages (role LIKE 'test_%') and Argus test sessions."""
-    conn = get_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM messages WHERE role LIKE 'test_%'")
-        cursor.execute("DELETE FROM sessions WHERE title LIKE 'Argus Unit Test%'")
-        cursor.execute("DELETE FROM thersites_scratchpad WHERE key LIKE 'task_%'")
-        conn.commit()
-    finally:
-        conn.close()
-
-def execute_user_sql_query(query: str) -> List[Dict[str, Any]]:
-    conn = get_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute(query)
+def execute_user_sql_query(query: str) -> str:
+    with get_db_connection() as conn:
+        cursor = conn.execute(query)
         if query.strip().upper().startswith("SELECT"):
             rows = cursor.fetchall()
-            return [dict(r) for r in rows]
+            return f"QueryResult: {[dict(r) for r in rows]}"
         else:
             conn.commit()
-            return [{"status": "success", "rows_affected": cursor.rowcount}]
-    finally:
-        conn.close()
+            return f"Query executed successfully. Rows affected: {cursor.rowcount}"
+
+def cleanup_test_data():
+    """Purges test_ messages and test sessions created during unit testing."""
+    with get_db_connection() as conn:
+        conn.execute("DELETE FROM messages WHERE role LIKE 'test_%' OR session_id LIKE 'Argus%' OR session_id LIKE 'test_%'")
+        conn.execute("DELETE FROM sessions WHERE id LIKE 'test_%' OR id LIKE 'Argus%'")
+        conn.commit()

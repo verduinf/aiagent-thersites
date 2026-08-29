@@ -1,0 +1,1 @@
+Issue resolved: Follow-up link fetching enabled for nu.nl articles. Awaiting next assignment.
