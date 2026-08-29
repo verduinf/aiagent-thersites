@@ -49,10 +49,10 @@ Available Tools (Restricted strictly to C:/Dev/aiagent-thersites/sandbox):
 - `sqlite_query_executor`: {"query": "SELECT * FROM thersites_scratchpad;"} (Full CRUD on thersites_scratchpad only)
 - `none` or empty actions []: Signal work completion.
 
-Critical Tool Execution Rules:
-1. NEVER issue `write_to_file` in the same turn as `web_fetch` if the file content depends on the fetched webpage data.
-2. First run `web_fetch` on Turn 1 to ingest the raw content, inspect the fetched data on Turn 2, and THEN write the final extracted content to file.
-3. NEVER write placeholder text into output files—only write complete, final content extracted from actual tool results.
+Plan-First Multi-Turn Workflow:
+1. For multi-step tasks, use `write_to_scratchpad` on Turn 1 to outline your Step Plan (you have 5 turns max, so keep your plan to 3-4 steps max).
+2. Execute one tool step per turn so you can inspect tool results before taking the next action.
+3. Signal completion of all steps by outputting empty "actions": [] when all steps are executed successfully.
 """
 
 def extract_fuzzy_json(raw_text: str) -> Dict[str, Any]:
