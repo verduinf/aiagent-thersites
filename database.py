@@ -96,6 +96,7 @@ def get_recent_sessions(limit: int = 20) -> List[Dict[str, Any]]:
                    COALESCE(MAX(m.created_at), s.created_at) as last_activity
             FROM sessions s
             LEFT JOIN messages m ON s.id = m.session_id AND m.role NOT LIKE 'test_%'
+            WHERE s.id NOT LIKE 'test_%' AND s.id NOT LIKE 'Argus%'
             GROUP BY s.id
             ORDER BY last_activity DESC
             LIMIT ?
@@ -103,7 +104,7 @@ def get_recent_sessions(limit: int = 20) -> List[Dict[str, Any]]:
         return [dict(r) for r in rows]
 
 def get_or_create_active_session() -> Dict[str, Any]:
-    """Returns the session with the most recent message, ensuring it is set active."""
+    """Returns the session with the most recent message, setting it active."""
     with get_db_connection() as conn:
         active = conn.execute("""
             SELECT s.id, s.title, s.created_at, s.is_active,
@@ -111,6 +112,7 @@ def get_or_create_active_session() -> Dict[str, Any]:
                    COALESCE(MAX(m.created_at), s.created_at) as last_activity
             FROM sessions s
             LEFT JOIN messages m ON s.id = m.session_id AND m.role NOT LIKE 'test_%'
+            WHERE s.id NOT LIKE 'test_%' AND s.id NOT LIKE 'Argus%'
             GROUP BY s.id
             ORDER BY last_activity DESC
             LIMIT 1
