@@ -92,14 +92,12 @@ document.addEventListener("DOMContentLoaded", () => {
             card.style.marginBottom = "0.6rem";
             card.style.fontSize = "0.8rem";
 
-            const isUser = m.role === 'user';
-
             card.innerHTML = `
                 <div class="message-header" style="margin-bottom: 0.3rem;">
                     <div class="message-author" style="font-size: 0.75rem;">
-                        <span>\U0001F4CD Anchor (Msg #${m.sequence_id})</span>
+                        <span>&#128205; Anchor (Msg #${m.sequence_id})</span>
                     </div>
-                    <button class="pin-btn pinned" data-msg-id="${m.id}" title="Unpin Anchor">\U0001F4CD</button>
+                    <button class="pin-btn pinned" data-msg-id="${m.id}" title="Unpin Anchor">&#128205;</button>
                 </div>
                 <div class="message-body" style="font-size: 0.8rem; line-height: 1.3;">${escapeHtml(m.content)}</div>
             `;
@@ -137,18 +135,18 @@ document.addEventListener("DOMContentLoaded", () => {
             
             const isUser = m.role === 'user';
             const author = isUser ? "The Boss" : "Thersites (Intern)";
-            const avatarIcon = isUser ? "\U0001F464" : "\U0001F4DC";
+            const avatarIcon = isUser ? "&#128104;" : "&#128220;";
             
             const isPinned = m.is_pinned === 1;
             const pinClass = isPinned ? "pinned" : "";
             
             let statusTagHtml = "";
             if (isPinned) {
-                statusTagHtml = `<span class="context-badge pinned" title="Pinned Anchor in System Contract">\U0001F4CD Pinned Anchor</span>`;
+                statusTagHtml = `<span class="context-badge pinned" title="Pinned Anchor in System Contract">&#128205; Pinned Anchor</span>`;
                 pinnedCharCount += m.content.length;
                 pinnedMessages.push(m);
             } else {
-                statusTagHtml = `<span class="context-badge in-rolling" title="Active 20k Rolling Buffer">\U0001F7E2 In 20k Window</span>`;
+                statusTagHtml = `<span class="context-badge in-rolling" title="Active 20k Rolling Buffer">&#128994; In 20k Window</span>`;
                 rollingCharCount += m.content.length;
             }
 
@@ -162,7 +160,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     <div class="message-actions">
                         <span class="seq-badge">Msg #${m.sequence_id}</span>
                         <span class="message-time">${m.created_at || ''}</span>
-                        <button class="pin-btn ${pinClass}" data-msg-id="${m.id}" title="Toggle Pin">\U0001F4CD</button>
+                        <button class="pin-btn ${pinClass}" data-msg-id="${m.id}" title="Toggle Pin">&#128205;</button>
                     </div>
                 </div>
                 <div class="message-body">${escapeHtml(m.content)}</div>
@@ -221,11 +219,10 @@ document.addEventListener("DOMContentLoaded", () => {
         promptInput.value = "";
         sendBtn.disabled = true;
         
-        // Show thought container and auto-expand on new prompt
         scratchpadAccordion.classList.add("visible");
         scratchpadAccordion.classList.remove("collapsed");
-        accordionHeader.innerHTML = `<span class="accordion-title">\U0001F7E1 Intern is thinking... (Turn 1/8)</span><span class="accordion-icon">\u25B2</span>`;
-        accordionBody.innerHTML = `<div class="accordion-step"><span class="step-icon">??</span> Connecting to Ollama model...</div>`;
+        accordionHeader.innerHTML = `<span class="accordion-title">&#128993; Intern is thinking... (Turn 1/8)</span><span class="accordion-icon">&#9650;</span>`;
+        accordionBody.innerHTML = `<div class="accordion-step"><span class="step-icon">&#128993;</span> Connecting to Ollama model...</div>`;
 
         let lastTurn = 1;
 
@@ -238,24 +235,24 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (data.type === "telemetry") {
                     lastTurn = data.turn;
                     const isCollapsed = scratchpadAccordion.classList.contains("collapsed");
-                    const icon = isCollapsed ? "?" : "?";
-                    accordionHeader.innerHTML = `<span class="accordion-title">\U0001F7E1 Intern is thinking... (Turn ${data.turn}/${data.max_turns})</span><span class="accordion-icon">${icon}</span>`;
+                    const icon = isCollapsed ? "&#9660;" : "&#9650;";
+                    accordionHeader.innerHTML = `<span class="accordion-title">&#128993; Intern is thinking... (Turn ${data.turn}/${data.max_turns})</span><span class="accordion-icon">${icon}</span>`;
                 } else if (data.type === "performance") {
                     if (perfTag) {
-                        perfTag.textContent = `? ${data.tok_per_sec} tok/s (${data.latency_sec}s)`;
+                        perfTag.textContent = `&#9889; ${data.tok_per_sec} tok/s (${data.latency_sec}s)`;
                     }
                 } else if (data.type === "scratch_step") {
                     const stepDiv = document.createElement("div");
                     stepDiv.className = "accordion-step";
                     
                     if (data.status === "error") {
-                        stepDiv.innerHTML = `<span class="step-icon">??</span> [Turn ${data.turn}] Details: ${escapeHtml(data.details)}`;
+                        stepDiv.innerHTML = `<span class="step-icon">&#128308;</span> [Turn ${data.turn}] Details: ${escapeHtml(data.details)}`;
                     } else {
                         let actionText = "";
                         if (data.actions && data.actions.length > 0) {
                             actionText = `<br><b>Action Requested:</b> <code>${escapeHtml(JSON.stringify(data.actions))}</code>`;
                         }
-                        stepDiv.innerHTML = `<span class="step-icon">??</span> [Turn ${data.turn}] <b>Thought:</b> ${escapeHtml(data.thought)}${actionText}`;
+                        stepDiv.innerHTML = `<span class="step-icon">&#128994;</span> [Turn ${data.turn}] <b>Thought:</b> ${escapeHtml(data.thought)}${actionText}`;
                     }
                     accordionBody.appendChild(stepDiv);
                     accordionBody.scrollTop = accordionBody.scrollHeight;
@@ -263,8 +260,8 @@ document.addEventListener("DOMContentLoaded", () => {
                     eventSource.close();
                     sendBtn.disabled = false;
                     const isCollapsed = scratchpadAccordion.classList.contains("collapsed");
-                    const icon = isCollapsed ? "?" : "?";
-                    accordionHeader.innerHTML = `<span class="accordion-title">\U0001F7E2 Intern task complete! (${lastTurn} turn${lastTurn > 1 ? 's' : ''})</span><span class="accordion-icon">${icon}</span>`;
+                    const icon = isCollapsed ? "&#9660;" : "&#9650;";
+                    accordionHeader.innerHTML = `<span class="accordion-title">&#128994; Intern task complete! (${lastTurn} turn${lastTurn > 1 ? 's' : ''})</span><span class="accordion-icon">${icon}</span>`;
                     loadMessages(currentSessionId);
                 }
             };
@@ -274,8 +271,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 eventSource.close();
                 sendBtn.disabled = false;
                 const isCollapsed = scratchpadAccordion.classList.contains("collapsed");
-                const icon = isCollapsed ? "?" : "?";
-                accordionHeader.innerHTML = `<span class="accordion-title">\U0001F534 Task completed with error</span><span class="accordion-icon">${icon}</span>`;
+                const icon = isCollapsed ? "&#9660;" : "&#9650;";
+                accordionHeader.innerHTML = `<span class="accordion-title">&#128308; Task completed with error</span><span class="accordion-icon">${icon}</span>`;
             };
 
         } catch (err) {
@@ -293,12 +290,11 @@ document.addEventListener("DOMContentLoaded", () => {
         createNewSession();
     });
 
-    // Accordion Header Toggle Handler: toggles .collapsed while preserving header title bar & arrow
     accordionHeader.addEventListener("click", () => {
         const isCollapsed = scratchpadAccordion.classList.toggle("collapsed");
         const iconSpan = accordionHeader.querySelector(".accordion-icon");
         if (iconSpan) {
-            iconSpan.textContent = isCollapsed ? "?" : "?";
+            iconSpan.innerHTML = isCollapsed ? "&#9660;" : "&#9650;";
         }
     });
 
