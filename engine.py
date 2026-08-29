@@ -250,7 +250,11 @@ def run_agent_inner_loop(session_id: str, user_prompt: str) -> Generator[Dict[st
             llm_messages.append({"role": m["role"], "content": m["content"]})
             
         for s in scratch_history:
-            llm_messages.append({"role": "assistant", "content": json.dumps(s)})
+            if "results" in s:
+                res_summary = "\n".join([f"[TOOL RESULT '{r.get('tool')}']: {str(r.get('result'))[:1500]}" for r in s.get("results", [])])
+                llm_messages.append({"role": "user", "content": res_summary})
+            elif "error" in s:
+                llm_messages.append({"role": "user", "content": f"[SYSTEM ERROR]: {s['error']}"})
             
         if turn >= MAX_INNER_LOOP_TURNS - 1:
             llm_messages.append({
