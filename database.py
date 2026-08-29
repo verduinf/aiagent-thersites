@@ -1,4 +1,4 @@
-﻿"""
+"""
 SQLite Database Operations for AI Agent Thersites
 Handles session persistence, episodic message storage, sequence ordering, and rolling/pinned context queries.
 Excludes test_% roles from user-facing context and provides test cleanup utilities.
@@ -88,16 +88,17 @@ def set_active_session(session_id: str) -> Dict[str, Any]:
         return {"id": session_id, "is_active": 1}
 
 def get_recent_sessions(limit: int = 20) -> List[Dict[str, Any]]:
-    """Returns sessions ordered by the timestamp of their most recent message."""
+    """Returns non-empty sessions ordered by the timestamp of their most recent message."""
     with get_db_connection() as conn:
         rows = conn.execute("""
             SELECT s.id, s.title, s.created_at, s.is_active,
                    COUNT(m.id) as msg_count,
                    COALESCE(MAX(m.created_at), s.created_at) as last_activity
             FROM sessions s
-            LEFT JOIN messages m ON s.id = m.session_id AND m.role NOT LIKE 'test_%'
+            JOIN messages m ON s.id = m.session_id AND m.role NOT LIKE 'test_%'
             WHERE s.id NOT LIKE 'test_%' AND s.id NOT LIKE 'Argus%'
             GROUP BY s.id
+            HAVING msg_count > 0
             ORDER BY last_activity DESC
             LIMIT ?
         """, (limit,)).fetchall()
@@ -232,8 +233,9 @@ def execute_user_sql_query(query: str) -> str:
             return f"Query executed successfully. Rows affected: {cursor.rowcount}"
 
 def cleanup_test_data():
-    """Purges test_ messages and test sessions created during unit testing."""
+    """Purges test_ messages, test sessions, and empty 0-message sessions."""
     with get_db_connection() as conn:
         conn.execute("DELETE FROM messages WHERE role LIKE 'test_%' OR session_id LIKE 'Argus%' OR session_id LIKE 'test_%'")
         conn.execute("DELETE FROM sessions WHERE id LIKE 'test_%' OR id LIKE 'Argus%'")
+        conn.execute("DELETE FROM sessions WHERE id NOT IN (SELECT DISTINCT session_id FROM messages)")
         conn.commit()

@@ -77,6 +77,44 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
+    function renderPinnedSidebar(pinnedMessages) {
+        if (!pinnedContainer) return;
+        pinnedContainer.innerHTML = "";
+        if (!pinnedMessages || pinnedMessages.length === 0) {
+            pinnedContainer.innerHTML = `<div class="empty-pinned">No pinned context anchors.</div>`;
+            return;
+        }
+
+        pinnedMessages.forEach(m => {
+            const card = document.createElement("div");
+            card.className = "message-card role-user pinned-sidebar-card";
+            card.style.padding = "0.6rem 0.75rem";
+            card.style.marginBottom = "0.6rem";
+            card.style.fontSize = "0.8rem";
+
+            const isUser = m.role === 'user';
+            const author = isUser ? "The Boss" : "Thersites";
+
+            card.innerHTML = `
+                <div class="message-header" style="margin-bottom: 0.3rem;">
+                    <div class="message-author" style="font-size: 0.75rem;">
+                        <span>?? Anchor (Msg #${m.sequence_id})</span>
+                    </div>
+                    <button class="pin-btn pinned" data-msg-id="${m.id}" title="Unpin Anchor">??</button>
+                </div>
+                <div class="message-body" style="font-size: 0.8rem; line-height: 1.3;">${escapeHtml(m.content)}</div>
+            `;
+            pinnedContainer.appendChild(card);
+        });
+
+        pinnedContainer.querySelectorAll(".pin-btn").forEach(btn => {
+            btn.addEventListener("click", async (e) => {
+                const msgId = e.target.getAttribute("data-msg-id");
+                await togglePin(msgId);
+            });
+        });
+    }
+
     function renderTimeline(messages) {
         timelineContainer.innerHTML = "";
         if (!messages || messages.length === 0) {
@@ -86,11 +124,13 @@ document.addEventListener("DOMContentLoaded", () => {
                 </div>
             `;
             updateContextBadges([]);
+            renderPinnedSidebar([]);
             return;
         }
 
         let rollingCharCount = 0;
         let pinnedCharCount = 0;
+        const pinnedMessages = [];
 
         messages.forEach(m => {
             const card = document.createElement("div");
@@ -107,6 +147,7 @@ document.addEventListener("DOMContentLoaded", () => {
             if (isPinned) {
                 statusTagHtml = `<span class="context-badge pinned" title="Pinned Anchor in System Contract">?? Pinned Anchor</span>`;
                 pinnedCharCount += m.content.length;
+                pinnedMessages.push(m);
             } else {
                 statusTagHtml = `<span class="context-badge in-rolling" title="Active 20k Rolling Buffer">?? In 20k Window</span>`;
                 rollingCharCount += m.content.length;
@@ -133,6 +174,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
         rollingBadge.textContent = `Rolling: ${rollingCharCount.toLocaleString()} / 20k`;
         pinnedBadge.textContent = `Pinned: ${pinnedCharCount.toLocaleString()} / 5k`;
+
+        renderPinnedSidebar(pinnedMessages);
 
         document.querySelectorAll(".pin-btn").forEach(btn => {
             btn.addEventListener("click", async (e) => {
