@@ -343,7 +343,7 @@ def execute_tool_call(action: Dict[str, Any]) -> Dict[str, Any]:
             
 
             
-        elif tool_name in ("send_pushover_alert", "send_notification", "send_push_notification"):
+        elif tool_name in ("send_message", "send_pushover_alert", "send_notification", "send_push_notification"):
             msg = sanitized_params.get("message", sanitized_params.get("text", "Task execution completed."))
             title = sanitized_params.get("title", "Thersites Agent")
             img_path = sanitized_params.get("image_path", sanitized_params.get("image", None))
