@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Local Intern Thersites - Local Console</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📜</text></svg>">
-    <link rel="stylesheet" href="/static/style.css?v=8">
+    <link rel="stylesheet" href="/static/style.css?v=9">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -38,11 +38,22 @@
         <div class="main-layout">
             <aside class="pinned-sidebar">
                 <div class="sidebar-header">
-                    <h3>📌 Pinned 5k Buffer</h3>
+                    <h3>?? Pinned 5k Buffer</h3>
                     <span class="pinned-count-badge" id="pinnedBadge">0 / 5,000 chars</span>
                 </div>
                 <div class="pinned-content" id="pinnedContainer">
                     <div class="empty-pinned">No pinned context anchors.</div>
+                </div>
+                <div class="sidebar-footer intern-profile-card">
+                    <div class="intern-avatar-frame">
+                        <img src="/static/images/thersites.png" alt="Thersites" class="intern-portrait-img">
+                        <span class="avatar-status-pip" title="Active in VRAM"></span>
+                    </div>
+                    <div class="intern-info">
+                        <div class="intern-name">Thersites</div>
+                        <div class="intern-role">Local AI Intern</div>
+                        <div class="intern-spec">Qwen3.5-9B ? GBNF JSON</div>
+                    </div>
                 </div>
             </aside>
 
@@ -73,6 +84,6 @@
         </div>
     </div>
 
-    <script src="/static/app.js?v=8"></script>
+    <script src="/static/app.js?v=9"></script>
 </body>
 </html>
