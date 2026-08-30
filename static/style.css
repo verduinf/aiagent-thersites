@@ -452,3 +452,85 @@ body {
 .delete-btn:hover {
     opacity: 1;
 }
+
+/* Sidebar Footer ? Thersites Profile Card in Lower Left */
+.pinned-sidebar .sidebar-footer {
+    padding: 0.85rem 1rem;
+    border-top: 1px solid var(--border-color);
+    background: linear-gradient(180deg, rgba(22, 27, 34, 0.6) 0%, rgba(13, 17, 23, 0.95) 100%);
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.intern-avatar-frame {
+    position: relative;
+    width: 48px;
+    height: 48px;
+    flex-shrink: 0;
+}
+
+.intern-portrait-img {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid var(--accent-cyan);
+    box-shadow: 0 0 12px rgba(56, 189, 248, 0.35);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.intern-portrait-img:hover {
+    transform: scale(1.06);
+    box-shadow: 0 0 16px rgba(56, 189, 248, 0.6);
+}
+
+.avatar-status-pip {
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    width: 10px;
+    height: 10px;
+    background-color: #4ade80;
+    border-radius: 50%;
+    border: 2px solid var(--panel-bg);
+    box-shadow: 0 0 6px #4ade80;
+}
+
+.intern-info {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.intern-name {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: #f0f6fc;
+    line-height: 1.2;
+}
+
+.intern-role {
+    font-size: 0.72rem;
+    color: var(--accent-cyan);
+    font-weight: 600;
+}
+
+.intern-spec {
+    font-size: 0.65rem;
+    font-family: var(--font-code);
+    color: var(--text-muted);
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.msg-avatar-thumb {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 1px solid var(--accent-cyan);
+    vertical-align: middle;
+}

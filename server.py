@@ -65,6 +65,7 @@ async def add_no_cache_header(request: Request, call_next):
     return response
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+app.mount("/images", StaticFiles(directory="Images"), name="images")
 
 class ChatRequest(BaseModel):
     prompt: str
