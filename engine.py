@@ -21,7 +21,7 @@ from database import (
     get_pinned_messages, get_rolling_messages, add_message,
     add_scratch_message, execute_user_sql_query
 )
-from warden import inspect_and_authorize
+from warden import inspect_and_authorize, enforce_single_action_rule
 from console_logger import (
     log_main, log_subagent, log_telemetry, log_performance, log_verbose,
     INDICATOR_DONE, INDICATOR_THINKING, INDICATOR_BLOCKED
@@ -43,7 +43,7 @@ Always output RAW JSON matching this exact structure:
 }}
 
 Available Tools (Restricted strictly to C:/Dev/aiagent-thersites/sandbox):
-- `web_fetch`: {{"url": "https://www.nu.nl/rss/Tech"}} (Fetches web pages or feeds. Target feeds like https://www.nu.nl/rss/Tech for instant summaries & [IMAGE: ...] URLs.)
+- `web_fetch`: {{"url": "https://nu.nl/..."}} (Fetches web pages or category feeds, e.g. https://www.nu.nl/weer for weather, https://www.nu.nl/rss/Algemeen for general news, https://www.nu.nl/rss/Tech for tech, https://www.nu.nl/rss/Economie for economy.)
 - `download_image`: {{"url": "https://images.nu.nl/...", "filepath": "C:/Dev/aiagent-thersites/sandbox/photo.jpg"}} (Downloads binary web image URLs to sandbox. Use for all [IMAGE: ...] downloads.)
 - `write_to_file`: {{"filepath": "C:/Dev/aiagent-thersites/sandbox/file.txt", "content": "..."}} (Writes text files. Overwrite target file fully.)
 - `read_file`: {{"filepath": "C:/Dev/aiagent-thersites/sandbox/file.txt"}}
@@ -54,10 +54,10 @@ Available Tools (Restricted strictly to C:/Dev/aiagent-thersites/sandbox):
 - `sqlite_query_executor`: {{"query": "SELECT * FROM thersites_scratchpad;"}}
 - `none` or empty actions []: Signal work completion.
 
-Plan-First Multi-Turn Workflow:
-1. Outline plan on Turn 1 if multi-step.
-2. Execute one tool step per turn.
-3. Signal completion with empty actions [].
+Execution Invariants (Enforced Strictly by The Warden):
+1. SINGLE ACTION PER TURN: Emit strictly ONE tool action in "actions": [{{"id": "act_1", "tool": "...", "params": {{}}}}]. Bundling multiple actions in a single turn is strictly forbidden.
+2. OBSERVE BEFORE WRITING: On Turn 1 of any research task, execute ONLY `web_fetch`. Never draft summaries or messages until you have inspected the fetched results on Turn 2.
+3. COMPLETION: Signal completion with empty actions [].
 """
 
 def extract_fuzzy_json(raw_text: str) -> Dict[str, Any]:
@@ -315,7 +315,7 @@ def execute_tool_call(action: Dict[str, Any]) -> Dict[str, Any]:
         if tool_name == "web_fetch":
             url = sanitized_params["url"]
             log_subagent("Web Fetcher", f"Fetching '{url}'...", INDICATOR_THINKING)
-            resp = requests.get(url, timeout=10)
+            resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"}, timeout=15)
             raw_html = resp.text
             clean_text = clean_html_to_text(raw_html, max_chars=4000)
             log_subagent("Web Fetcher", f"Extracted {len(clean_text)} chars of text with article URLs in 0.01s", INDICATOR_DONE)
@@ -421,6 +421,8 @@ def run_agent_inner_loop(session_id: str, user_prompt: str, think_mode: bool = F
             llm_messages.append({"role": m["role"], "content": m["content"]})
             
         for s in scratch_history:
+            if "warden_notice" in s:
+                llm_messages.append({"role": "user", "content": s["warden_notice"]})
             if "results" in s:
                 res_summary = "\n".join([f"[TOOL RESULT '{r.get('tool')}']: {str(r.get('result'))[:4000]}" for r in s.get("results", [])])
                 llm_messages.append({"role": "user", "content": res_summary})
@@ -490,6 +492,12 @@ def run_agent_inner_loop(session_id: str, user_prompt: str, think_mode: bool = F
             }
             continue
             
+        # Warden Single-Action Enforcement
+        actions, warden_defer_notice = enforce_single_action_rule(actions)
+        if warden_defer_notice:
+            log_main(warden_defer_notice, INDICATOR_BLOCKED)
+            scratch_history.append({"warden_notice": warden_defer_notice})
+
         yield {
             "type": "scratch_step",
             "turn": turn,

@@ -19,7 +19,7 @@ from database import (
     toggle_message_pin, get_pinned_messages, get_rolling_messages,
     get_all_messages, add_scratch_message, cleanup_test_data, delete_message
 )
-from warden import inspect_and_authorize, WardenViolation, validate_url, validate_write_path, validate_sql_query
+from warden import inspect_and_authorize, WardenViolation, validate_url, validate_write_path, validate_sql_query, enforce_single_action_rule
 from engine import extract_fuzzy_json, clean_html_to_text
 from config import SANDBOX_DIR
 
@@ -191,6 +191,27 @@ class TestThersitesSuite(unittest.TestCase):
         self.assertIn("Successfully downloaded image", res["result"])
         if os.path.exists(target_img):
             os.remove(target_img)
+
+
+    def test_10_warden_single_action_rule(self):
+        # Multiple actions emitted in a single turn
+        multi_actions = [
+            {"id": "act_1", "tool": "web_fetch", "params": {"url": "https://nu.nl/weer"}},
+            {"id": "act_2", "tool": "write_to_file", "params": {"filepath": "sandbox/w.txt", "content": "fake"}},
+            {"id": "act_3", "tool": "send_message", "params": {"message": "fake weather"}}
+        ]
+        
+        filtered, notice = enforce_single_action_rule(multi_actions)
+        self.assertEqual(len(filtered), 1)
+        self.assertEqual(filtered[0]["tool"], "web_fetch")
+        self.assertIsNotNone(notice)
+        self.assertIn("Single-Action Rule Active", notice)
+        
+        # Single action should pass unmodified with zero notice
+        single_action = [{"id": "act_1", "tool": "web_fetch", "params": {"url": "https://nu.nl/weer"}}]
+        filtered_single, notice_single = enforce_single_action_rule(single_action)
+        self.assertEqual(len(filtered_single), 1)
+        self.assertIsNone(notice_single)
 
 
 if __name__ == "__main__":

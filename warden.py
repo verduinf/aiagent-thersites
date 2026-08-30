@@ -1,12 +1,32 @@
-﻿"""
+"""
 The Warden — Guardrail Security & Scope Enforcer for AI Agent Thersites
 Enforces sandbox enclosure, domain whitelisting, and SQL table mutation rules.
 """
 import os
 import re
 from pathlib import Path
-from typing import Tuple, Dict, Any
 from config import SANDBOX_DIR, URL_DOMAIN_WHITELIST
+
+from typing import Tuple, Dict, Any, List, Optional
+
+def enforce_single_action_rule(actions: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+    """
+    Enforces the Single-Action Invariant per turn.
+    If multiple actions are emitted, truncates execution strictly to the first actionable tool call
+    and defers the rest to subsequent turns to prevent multi-step hallucinations.
+    """
+    if not actions or len(actions) <= 1:
+        return actions, None
+        
+    first_action = actions[0]
+    deferred_count = len(actions) - 1
+    deferred_tools = [a.get("tool", a.get("name", "tool")) for a in actions[1:]]
+    
+    warden_notice = (
+        f"[WARDEN ENFORCEMENT]: Single-Action Rule Active. Executing strictly 1st action ('{first_action.get('tool')}'). "
+        f"Deferred {deferred_count} bundled action(s) ({', '.join(deferred_tools)}) to the next turn to ensure step-by-step observation."
+    )
+    return [first_action], warden_notice
 
 class WardenViolation(Exception):
     """Raised when a tool action violates safety or sandbox boundaries."""
