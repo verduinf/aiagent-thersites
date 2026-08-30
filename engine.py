@@ -336,6 +336,8 @@ def execute_tool_call(action: Dict[str, Any]) -> Dict[str, Any]:
                 url = "https://www.nu.nl/rss/Tech"
             elif normalized_url in ("https://www.nu.nl/algemeen", "https://nu.nl/algemeen", "https://www.nu.nl", "https://nu.nl"):
                 url = "https://www.nu.nl/rss/Algemeen"
+            elif normalized_url in ("https://www.nrc.nl", "https://nrc.nl"):
+                url = "https://www.nrc.nl/rss/"
                 
             log_subagent("Web Fetcher", f"Fetching '{url}'...", INDICATOR_THINKING)
             resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"}, timeout=15)
