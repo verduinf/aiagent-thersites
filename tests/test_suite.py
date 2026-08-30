@@ -152,5 +152,46 @@ class TestThersitesSuite(unittest.TestCase):
         self.assertTrue("Successfully dispatched" in res["result"] or "[SIMULATION]" in res["result"])
 
 
+    @patch("requests.get")
+    def test_09_download_image_tool(self, mock_get):
+        # Mock HTTP GET response for image download
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.content = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR..."
+        mock_get.return_value = mock_resp
+
+        # 1. Test Warden authorization for download_image
+        target_img = str(SANDBOX_DIR / "test_download.png")
+        ok, msg, params = inspect_and_authorize("download_image", {
+            "url": "https://media.nu.nl/m/test.jpg",
+            "filepath": target_img
+        })
+        self.assertTrue(ok)
+        self.assertIn("authorized", msg.lower())
+
+        # Test unauthorized domain blocked
+        ok, msg, params = inspect_and_authorize("download_image", {
+            "url": "https://malicious.com/virus.exe",
+            "filepath": target_img
+        })
+        self.assertFalse(ok)
+        self.assertIn("unauthorized domain", msg.lower())
+
+        # 2. Test Engine execution with mocked download
+        from engine import execute_tool_call
+        res = execute_tool_call({
+            "id": "act_1",
+            "tool": "download_image",
+            "params": {
+                "url": "https://media.nu.nl/m/test.jpg",
+                "filepath": target_img
+            }
+        })
+        self.assertEqual(res["status"], "success")
+        self.assertIn("Successfully downloaded image", res["result"])
+        if os.path.exists(target_img):
+            os.remove(target_img)
+
+
 if __name__ == "__main__":
     unittest.main()

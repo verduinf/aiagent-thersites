@@ -67,6 +67,17 @@ def inspect_and_authorize(tool_name: str, params: Dict[str, Any]) -> Tuple[bool,
         ok, msg = validate_url(url)
         return ok, msg, params
         
+    elif tool_name == "download_image":
+        url = params.get("url", "")
+        filepath = params.get("filepath", "")
+        url_ok, url_msg = validate_url(url)
+        if not url_ok:
+            return False, url_msg, params
+        path_ok, path_msg = validate_write_path(filepath)
+        if not path_ok:
+            return False, path_msg, params
+        return True, "Image download authorized by The Warden.", params
+        
     elif tool_name in ("write_to_file", "read_file", "delete_file"):
         filepath = params.get("filepath", "")
         ok, msg = validate_write_path(filepath)

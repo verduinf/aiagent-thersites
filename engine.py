@@ -137,6 +137,16 @@ def clean_html_to_text(html_content: str, max_chars: int = 4000) -> str:
         return f" [{anchor_text}]({href}) "
 
     text = re.sub(r'<a\s+[^>]*href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', link_replacer, text, flags=re.DOTALL | re.IGNORECASE)
+    
+    def img_replacer(match):
+        src = match.group(1)
+        if src.startswith("/"):
+            src = f"https://nu.nl{src}"
+        if not src.endswith((".svg", ".gif", ".ico")) and ("media" in src or "images" in src or src.endswith((".jpg", ".png", ".webp"))):
+            return f" [IMAGE: {src}] "
+        return " "
+
+    text = re.sub(r'<img\s+[^>]*src=["\']([^"\']+)["\'][^>]*>', img_replacer, text, flags=re.DOTALL | re.IGNORECASE)
     text = re.sub(r'<[^>]+>', ' ', text)
     text = re.sub(r'\s+', ' ', text).strip()
     return text[:max_chars]
@@ -309,6 +319,20 @@ def execute_tool_call(action: Dict[str, Any]) -> Dict[str, Any]:
             log_subagent("Web Fetcher", f"Extracted {len(clean_text)} chars of text with article URLs in 0.01s", INDICATOR_DONE)
             return {"id": action_id, "tool": tool_name, "status": "success", "result": clean_text}
             
+        elif tool_name == "download_image":
+            url = sanitized_params["url"]
+            filepath = sanitized_params["filepath"]
+            log_subagent("Image Downloader", f"Fetching image '{url}'...", INDICATOR_THINKING)
+            resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AI-Agent-Thersites"}, timeout=15)
+            if resp.status_code == 200:
+                with open(filepath, "wb") as f:
+                    f.write(resp.content)
+                size_kb = round(len(resp.content) / 1024, 1)
+                log_subagent("Image Downloader", f"Saved {size_kb} KB to '{Path(filepath).name}'", INDICATOR_DONE)
+                return {"id": action_id, "tool": tool_name, "status": "success", "result": f"Successfully downloaded image ({size_kb} KB) to '{filepath}'"}
+            else:
+                return {"id": action_id, "tool": tool_name, "status": "error", "result": f"HTTP {resp.status_code} while downloading image"}
+
         elif tool_name == "write_to_file":
             filepath = sanitized_params["filepath"]
             content = sanitized_params.get("content", "")
