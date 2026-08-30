@@ -94,8 +94,7 @@ def extract_fuzzy_json(raw_text: str) -> Dict[str, Any]:
         data = valid_candidates[0]
         
     if not data:
-        # Graceful conversational fallback: treat plain conversational text as a final response with empty actions
-        return {"thought": "Direct conversational response.", "content": clean_text, "actions": []}
+        raise ValueError("No valid contract JSON object found in response. You MUST wrap your response in valid JSON matching the contract schema.")
         
     thought = data.get("thought", "Processing...")
     content = data.get("content", "")
