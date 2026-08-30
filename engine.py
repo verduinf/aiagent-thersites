@@ -153,7 +153,7 @@ def clean_html_to_text(html_content: str, max_chars: int = 4000) -> str:
     text = re.sub(r'\s+', ' ', text).strip()
     return text[:max_chars]
 
-def prewarm_ollama_model() -> bool:
+def prewarm_ollama_model(think_mode: bool = False) -> bool:
     """Pre-loads model into VRAM on startup using empty messages array (2s)."""
     native_url = f"{OLLAMA_BASE_URL.rstrip('/')}/api/chat"
     payload = {
