@@ -622,17 +622,26 @@ def run_agent_inner_loop(session_id: str, user_prompt: str, think_mode: bool = F
             "status": "executed"
         }
         
-        if not actions or all(a.get("tool", "") in ("none", "finish", "") for a in actions):
-            log_main(f"Inner Loop Terminated cleanly on Turn {turn}.", INDICATOR_DONE)
-            break
-            
         action_results = []
+        has_external_action = False
+        
         for act in actions:
-            res = execute_tool_call(act)
-            action_results.append(res)
-            add_scratch_message(session_id, turn, res.get("tool", "unknown"), json.dumps(res))
+            tool_name = act.get("tool", act.get("name", "")).strip().lower()
+            if tool_name not in ("none", "finish", ""):
+                res = execute_tool_call(act)
+                action_results.append(res)
+                add_scratch_message(session_id, turn, res.get("tool", "unknown"), json.dumps(res))
+                # External actions require subsequent turn observation; memory actions (remember/unremember) are internal reflexes
+                if tool_name not in ("remember", "unremember"):
+                    has_external_action = True
             
-        scratch_history.append({"actions_executed": actions, "results": action_results})
+        if action_results:
+            scratch_history.append({"actions_executed": actions, "results": action_results})
+            
+        # If there are NO pending external toolkit actions, the task is COMPLETE! Terminate the loop immediately.
+        if not has_external_action:
+            log_main(f"Inner Loop Terminated cleanly on Turn {turn} (Task completed without pending external observations).", INDICATOR_DONE)
+            break
         
     if not is_error_response:
         final_msg = add_message(session_id, "assistant", final_response)
