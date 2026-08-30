@@ -149,17 +149,27 @@ def validate_image_path(filepath: str) -> Tuple[bool, str]:
     if not filepath or not isinstance(filepath, str):
         return False, "Missing or invalid image file path."
         
+    # Direct HTTP/HTTPS URLs authorized via validate_url
+    if filepath.startswith(("http://", "https://")):
+        return validate_url(filepath)
+        
     try:
         p = Path(filepath).resolve()
+        sandbox_res = SANDBOX_DIR.resolve()
+        base_res = BASE_DIR.resolve()
+        
+        # Check if exists directly or inside SANDBOX_DIR
         if not p.exists():
-            return False, f"Image file does not exist at '{filepath}'"
+            if (SANDBOX_DIR / Path(filepath).name).exists():
+                p = (SANDBOX_DIR / Path(filepath).name).resolve()
+            elif (SANDBOX_DIR / filepath).exists():
+                p = (SANDBOX_DIR / filepath).resolve()
+            else:
+                return False, f"Image file does not exist at '{filepath}'"
             
         if p.suffix.lower() not in VALID_IMAGE_EXTENSIONS:
             return False, f"File '{p.name}' has invalid image extension '{p.suffix}'. Must be one of: {', '.join(sorted(VALID_IMAGE_EXTENSIONS))}"
             
-        sandbox_res = SANDBOX_DIR.resolve()
-        base_res = BASE_DIR.resolve()
-        
         # Allowed in sandbox, uploads, or project Images directory
         if sandbox_res in p.parents or p == sandbox_res or base_res in p.parents:
             return True, f"Image path '{filepath}' authorized for visual analysis."
@@ -231,7 +241,7 @@ def inspect_and_authorize(tool_name: str, params: Dict[str, Any]) -> Tuple[bool,
         return True, f"Memory clue unremember '{key}' authorized.", params
 
     elif tool_name in ("identify_image", "inspect_image", "gorgons_gaze", "analyze_image"):
-        filepath = params.get("filepath", params.get("image_path", params.get("path", "")))
+        filepath = params.get("filepath", params.get("image_path", params.get("path", params.get("url", ""))))
         ok, msg = validate_image_path(filepath)
         return ok, msg, params
 

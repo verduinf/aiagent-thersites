@@ -296,12 +296,51 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
+    function appendOptimisticUserMessage(promptText, attachedImg = null) {
+        const emptyPlaceholder = timelineContainer.querySelector("div[style*='text-align: center']");
+        if (emptyPlaceholder) {
+            timelineContainer.innerHTML = "";
+        }
+
+        const card = document.createElement("div");
+        card.className = "message-card role-user optimistic-user-card";
+        
+        let imgHtml = "";
+        if (attachedImg) {
+            imgHtml = `<div class="msg-image-attachment" style="margin-bottom: 8px;"><img src="${attachedImg.url}" alt="Attachment" style="max-width: 220px; max-height: 180px; border-radius: 8px; border: 1px solid var(--accent-cyan); display: block;"></div>`;
+        }
+        
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        
+        card.innerHTML = `
+            <div class="message-header">
+                <div class="message-author">
+                    <span class="message-avatar">&#128104;</span>
+                    <span>The Boss</span>
+                    <span class="context-badge in-rolling" title="Active 20k Rolling Buffer">&#128994; In 20k Window</span>
+                </div>
+                <div class="message-actions">
+                    <span class="seq-badge">Pending</span>
+                    <span class="message-time">${timeStr}</span>
+                </div>
+            </div>
+            <div class="message-body">${imgHtml}${escapeHtml(promptText)}</div>
+        `;
+        
+        timelineContainer.appendChild(card);
+        card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+
     chatForm.addEventListener("submit", async (e) => {
         e.preventDefault();
         let prompt = promptInput.value.trim();
         if (!prompt) {
             prompt = "Please check for tasks in your pinned instructions and execute them.";
         }
+
+        const currentAttachedImage = attachedImage;
+        appendOptimisticUserMessage(prompt, currentAttachedImage);
 
         promptInput.value = "";
         sendBtn.disabled = true;
@@ -315,13 +354,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
         try {
             let streamUrl = `/api/chat/stream?session_id=${currentSessionId}&prompt=${encodeURIComponent(prompt)}`;
-        if (attachedImage) {
-            streamUrl += `&image_path=${encodeURIComponent(attachedImage.filepath)}`;
-        }
-        attachedImage = null;
-        renderImagePreview();
+            if (attachedImage) {
+                streamUrl += `&image_path=${encodeURIComponent(attachedImage.filepath)}`;
+            }
+            attachedImage = null;
+            renderImagePreview();
 
-        const eventSource = new EventSource(streamUrl);
+            const eventSource = new EventSource(streamUrl);
 
             eventSource.onmessage = (event) => {
                 const data = JSON.parse(event.data);

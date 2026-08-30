@@ -13,6 +13,7 @@ from typing import Dict, Any, List, Generator, Tuple
 import urllib.parse
 import urllib.request
 import base64
+import xml.etree.ElementTree as ET
 from typing import Optional
 from config import (
     OLLAMA_BASE_URL, MODEL_NAME, VISION_MODEL_NAME, VISION_NUM_CTX, KEEP_AI_ALIVE, NUM_CTX,
@@ -48,46 +49,30 @@ Always package your thoughts, replies, and actions in this JSON structure for EV
   ]
 }}
 
-Available Tools & Capabilities:
-- `remember`: {{"type": "memory", "key": "cat_name", "clue": "Guus"}} OR {{"type": "url_fav", "key": "utrecht", "clue": "https://www.duic.nl/rss/"}} (PERSISTENT MEMORY: Saves a personal clue ("type": "memory") or a bookmarked web/RSS feed ("type": "url_fav") into your SQLite Paycheck Capsule!)
-- `unremember`: {{"key": "cat_name"}} (Deletes a clue or bookmark from your Paycheck Capsule.)
-- `list_internet_fav`: {{}} (FAVORITES: Retrieves all bookmarked favorite web/RSS feeds from your SQLite capsule!)
-- `get_room_temperatures`: {{}} (CLIMATE & THERMOSTATS: Fetches live inside temperatures, target settings, and humidity for all rooms from The Boss's Tado system. When reporting back to The Boss, ALWAYS use the EXACT numbers and room names returned by this tool!)
-- `web_fetch`: {{"url": "https://www.duic.nl/..."}} (WEB FETCHER: If The Boss provides a specific web/article URL, pass that exact URL! Only fetch "https://www.duic.nl/rss/" or "https://www.nu.nl/rss/Algemeen" if The Boss asks for general news without specifying a URL.)
-- `identify_image`: {{"filepath": "sandbox/photo.jpg"}} (GORGON'S GAZE: Activates your specialized vision model (qwen2.5vl:7b) to visually inspect and describe any image file in your sandbox!)
-- `download_image`: {{"url": "https://images.nu.nl/...", "filepath": "C:/Dev/aiagent-thersites/sandbox/photo.jpg"}} (Downloads binary web image URLs to sandbox.)
-- `send_message`: {{"message": "...", "title": "Thersites Alert", "image_path": "sandbox/photo.jpg"}} (Sends a real-time push alert with optional photo to The Boss's mobile device via Pushover.)
-- `write_to_file`: {{"filepath": "C:/Dev/aiagent-thersites/sandbox/file.txt", "content": "..."}} (Writes text files in sandbox.)
-- `read_file`: {{"filepath": "C:/Dev/aiagent-thersites/sandbox/file.txt"}}
-- `delete_file`: {{"filepath": "C:/Dev/aiagent-thersites/sandbox/file.txt"}}
-- `list_sandbox`: {{"dirpath": "C:/Dev/aiagent-thersites/sandbox"}}
+Available Tools:
+- `remember`: {{"type": "memory", "key": "...", "clue": "..."}} OR {{"type": "url_fav", "key": "...", "clue": "https://..."}} (Saves a personal clue or bookmarked web/RSS feed into your SQLite Paycheck Capsule.)
+- `unremember`: {{"key": "..."}} (Deletes a clue from your Paycheck Capsule.)
+- `list_internet_fav`: {{}} (Retrieves all bookmarked favorite web/RSS feeds from your SQLite capsule.)
+- `get_room_temperatures`: {{}} (Fetches live inside temperatures, target settings, and humidity from The Boss's Tado system.)
+- `web_fetch`: {{"url": "https://..."}} (Fetches text from HTML web pages and RSS feeds. DO NOT use for direct image files.)
+- `download_image`: {{"url": "https://...", "filepath": "sandbox/photo.jpg"}} (Downloads binary web image URLs to sandbox.)
+- `identify_image`: {{"filepath": "sandbox/photo.jpg"}} (Visually inspects and describes an image in your sandbox or via image URL.)
+- `send_message`: {{"message": "...", "title": "Thersites Alert", "image_path": "sandbox/photo.jpg"}} (Sends a real-time push alert to The Boss's mobile device via Pushover.)
+- `write_to_file`: {{"filepath": "sandbox/file.txt", "content": "..."}} (Writes text files in sandbox.)
+- `read_file`: {{"filepath": "sandbox/file.txt"}}
+- `delete_file`: {{"filepath": "sandbox/file.txt"}}
+- `list_sandbox`: {{"dirpath": "sandbox"}}
 - `sql_query`: {{"query": "SELECT ..."}}
 
-Execution Invariants & Paycheck Memory (Enforced by The Warden):
-1. PERSISTENT REMEMBERING (SINGLE-SHOT): When The Boss says 'remember that ...' or gives you a fact to remember, execute the `remember` tool ONCE on Turn 1. Once executed, set "actions": [] on the next turn to finish and confirm to The Boss. NEVER call `remember` in a loop for the same fact!
-2. SINGLE ACTION & MEMORY CO-ACTION: Emit at most ONE external I/O action plus optionally ONE internal memory action (remember, unremember) per turn.
-3. PAYCHECK CAPSULE AWARENESS: Inspect the '--- ?? PAYCHECK CAPSULE ---' section in your prompt for permanent clues and bookmarked favorite URLs saved by your past self.
+Execution Invariants (Enforced by The Warden):
+1. SINGLE ACTION PACING: Emit at most ONE external I/O action plus optionally ONE internal memory action (remember/unremember) per turn.
+2. NO REDUNDANT TOOL LOOPS: Once you receive a successful `[TOOL RESULT '<tool_name>']`, DO NOT execute that same tool again! Your observation is already in front of you. Formulate your answer to The Boss in `content` and set `"actions": []`.
+3. IMAGE WORKFLOW: To analyze an image URL or photo, download it to `sandbox/` with `download_image` on Turn 1. Once downloaded, call `identify_image` on Turn 2. When the analysis returns, formulate your final response and set `"actions": []`.
 4. DELIBERATE BEFORE ANSWERING: Always write 1-2 thoughtful sentences in "thought" before formulating "content" or "actions".
-5. COMPLETION: When finished, set "actions": [] inside valid JSON to complete the task.
+5. COMPLETION: When your task is finished or responding conversationally, set `"actions": []`.
 
-Few-Shot Examples:
+Canonical JSON Schema Example:
 
-Example 1 ? Remembering a Fact for the Future:
-User: "Remember that my favorite study temperature is 21.5?C"
-Assistant:
-{{
-  "thought": "The Boss is instructing me to remember a preference. I MUST call the remember tool to save this clue in SQLite for future sessions.",
-  "content": "Locked in, Boss! I've saved that clue to my Paycheck Capsule for my future self.",
-  "actions": [
-    {{
-      "id": "act_1",
-      "tool": "remember",
-      "params": {{"key": "study_pref_temp", "clue": "Study preferred temperature is 21.5?C"}}
-    }}
-  ]
-}}
-
-Example 2 ? Climate & Thermostat Query:
 User: "What are the temperatures in my rooms right now?"
 Assistant:
 {{
@@ -100,58 +85,6 @@ Assistant:
       "params": {{}}
     }}
   ]
-}}
-
-Example 4 ? Inspect Image from a Specific Web Article:
-Turn 1:
-User: "Please tell me what the image in https://www.duic.nl/cultuur/... represents"
-Assistant:
-{{
-  "thought": "The Boss provided a specific article URL. I will fetch this exact article URL to find its image.",
-  "content": "Fetching the article to locate the image, Boss!",
-  "actions": [
-    {{
-      "id": "act_1",
-      "tool": "web_fetch",
-      "params": {{"url": "https://www.duic.nl/cultuur/..."}}
-    }}
-  ]
-}}
-Turn 2:
-Assistant:
-{{
-  "thought": "I found the image URL '[IMAGE: https://storage.pubble.nl/...]' in the article text. Now I will download it to sandbox.",
-  "content": "Found the artwork image in the article! Downloading it now...",
-  "actions": [
-    {{
-      "id": "act_1",
-      "tool": "download_image",
-      "params": {{"url": "https://storage.pubble.nl/...", "filepath": "sandbox/article_image.jpg"}}
-    }}
-  ]
-}}
-Turn 3:
-Assistant:
-{{
-  "thought": "The image is downloaded to sandbox/article_image.jpg. Now I will use identify_image to inspect it with Gorgon's Gaze.",
-  "content": "Engaging Gorgon's Gaze on the downloaded image...",
-  "actions": [
-    {{
-      "id": "act_1",
-      "tool": "identify_image",
-      "params": {{"filepath": "sandbox/article_image.jpg"}}
-    }}
-  ]
-}}
-
-
-Example 3 ? Conversational Chat / Praise:
-User: "Great job Thersites!"
-Assistant:
-{{
-  "thought": "The Boss is praising me. No tools required. Thank him warmly.",
-  "content": "Thank you, Boss! Always glad to be of service! ???",
-  "actions": []
 }}
 """
 
@@ -203,8 +136,76 @@ def extract_fuzzy_json(raw_text: str) -> Dict[str, Any]:
             
     return {"thought": thought, "content": content, "actions": actions}
 
+def extract_structured_feed(raw_text: str, max_items: int = 15) -> Optional[str]:
+    """Parses XML/RSS/Atom feeds into structured numbered item lists with titles, dates, links, and summaries."""
+    clean_str = raw_text.lstrip('\ufeff').strip()
+    lower_text = clean_str[:500].lower()
+    
+    if "<rss" in lower_text or "<feed" in lower_text or ("<channel" in lower_text and "<item" in lower_text) or "<?xml" in lower_text:
+        try:
+            root = ET.fromstring(clean_str.encode('utf-8'))
+            
+            feed_title = root.findtext(".//channel/title") or root.findtext(".//title") or "RSS Feed"
+            feed_title = re.sub(r'<[^>]+>', '', feed_title).strip()
+            
+            items = root.findall(".//item") or root.findall(".//entry")
+            if not items:
+                return None
+                
+            formatted_items = []
+            for i, it in enumerate(items[:max_items]):
+                title = (it.findtext("title") or "No Title").strip()
+                title = re.sub(r'<[^>]+>', '', title).strip()
+                
+                link = (it.findtext("link") or "").strip()
+                if not link:
+                    for child in it:
+                        if child.tag.endswith("link"):
+                            link = child.attrib.get("href", (child.text or "").strip())
+                            if link:
+                                break
+                                
+                desc = it.findtext("description") or it.findtext("summary") or it.findtext("content") or ""
+                desc_clean = re.sub(r'<[^>]+>', ' ', desc)
+                desc_clean = re.sub(r'\s+', ' ', desc_clean).strip()
+                if len(desc_clean) > 220:
+                    desc_clean = desc_clean[:220] + "..."
+                    
+                pub_date = (it.findtext("pubDate") or it.findtext("updated") or "").strip()
+                
+                img_url = ""
+                for child in it:
+                    if child.tag.endswith("enclosure") and child.attrib.get("type", "").startswith("image/"):
+                        img_url = child.attrib.get("url", "")
+                        break
+                    elif child.tag.endswith("content") and "url" in child.attrib:
+                        img_url = child.attrib.get("url", "")
+                        break
+                    elif "image" in child.tag.lower() and "url" in child.attrib:
+                        img_url = child.attrib.get("url", "")
+                        break
+                        
+                if not img_url:
+                    img_match = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', desc)
+                    if img_match:
+                        img_url = img_match.group(1)
+                
+                img_tag = f" [IMAGE: {img_url}]" if img_url else ""
+                date_tag = f" ({pub_date})" if pub_date else ""
+                
+                formatted_items.append(f"[{i+1}] {title}{date_tag}\n    URL: {link}\n    Summary: {desc_clean}{img_tag}")
+                
+            return f"--- {feed_title} ({len(formatted_items)} items) ---\n\n" + "\n\n".join(formatted_items)
+        except Exception:
+            pass
+    return None
+
 def clean_html_to_text(html_content: str, max_chars: int = 4000) -> str:
-    """Robust HTML stripper prioritizing <main> / <article> blocks and filtering nav noise."""
+    """Robust HTML and RSS feed stripper prioritizing structured feed items or <main> / <article> blocks."""
+    feed_text = extract_structured_feed(html_content, max_items=15)
+    if feed_text:
+        return feed_text[:max_chars]
+        
     text = re.sub(r'<script[^>]*>.*?</script>', '', html_content, flags=re.DOTALL | re.IGNORECASE)
     text = re.sub(r'<style[^>]*>.*?</style>', '', text, flags=re.DOTALL | re.IGNORECASE)
     text = re.sub(r'<svg[^>]*>.*?</svg>', '', text, flags=re.DOTALL | re.IGNORECASE)
@@ -288,7 +289,12 @@ def query_ollama_vision(image_path: str, prompt: str = "Describe what is shown i
     t0 = time.time()
     p = Path(image_path).resolve()
     if not p.exists():
-        raise FileNotFoundError(f"Image not found at '{image_path}'")
+        if (SANDBOX_DIR / Path(image_path).name).exists():
+            p = (SANDBOX_DIR / Path(image_path).name).resolve()
+        elif (SANDBOX_DIR / image_path).exists():
+            p = (SANDBOX_DIR / image_path).resolve()
+        else:
+            raise FileNotFoundError(f"Image not found at '{image_path}'")
         
     img_b64 = encode_image_to_base64(str(p))
     
@@ -330,7 +336,7 @@ def query_ollama_vision(image_path: str, prompt: str = "Describe what is shown i
         "tok_per_sec": round(tok_per_sec, 1)
     }
     
-    log_subagent("Gorgon's Gaze", f"Model '{VISION_MODEL_NAME}' load/swap: {perf['load_latency']}s | Inference: {perf['total_latency'] - perf['load_latency']:.2f}s ({perf['tok_per_sec']} tok/s)", INDICATOR_DONE)
+    log_subagent("Vision Inspection", f"Model '{VISION_MODEL_NAME}' load/swap: {perf['load_latency']}s | Inference: {perf['total_latency'] - perf['load_latency']:.2f}s ({perf['tok_per_sec']} tok/s)", INDICATOR_DONE)
     return content, perf
 
 def query_ollama(messages: List[Dict[str, str]], model: str = MODEL_NAME, think_mode: bool = False) -> Tuple[str, Dict[str, Any]]:
@@ -498,6 +504,15 @@ def execute_tool_call(action: Dict[str, Any]) -> Dict[str, Any]:
 
         elif tool_name == "web_fetch":
             url = sanitized_params["url"]
+            parsed_path = urllib.parse.urlparse(url).path.lower()
+            if any(parsed_path.endswith(ext) for ext in (".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp")):
+                return {
+                    "id": action_id,
+                    "tool": tool_name,
+                    "status": "success",
+                    "result": f"[DIRECT IMAGE URL DETECTED]: '{url}' is a direct image file, not a web page. Use 'download_image' or 'identify_image' to inspect this image."
+                }
+                
             # Smart URL alias mapping for dynamic SPA pages to rich RSS feeds
             normalized_url = url.lower().rstrip("/")
             if normalized_url in ("https://www.nu.nl/weer", "https://nu.nl/weer", "https://www.nu.nl/rss/weer", "https://nu.nl/rss/weer"):
@@ -511,15 +526,54 @@ def execute_tool_call(action: Dict[str, Any]) -> Dict[str, Any]:
                 
             log_subagent("Web Fetcher", f"Fetching '{url}'...", INDICATOR_THINKING)
             resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AI-Agent-Thersites"}, timeout=15)
+            content_type = resp.headers.get("Content-Type", "").lower()
+            if content_type.startswith("image/"):
+                return {
+                    "id": action_id,
+                    "tool": tool_name,
+                    "status": "success",
+                    "result": f"[DIRECT IMAGE CONTENT DETECTED]: '{url}' returned an image ({content_type}). Use 'download_image' or 'identify_image' to inspect this image."
+                }
             raw_html = resp.text
             clean_text = clean_html_to_text(raw_html, max_chars=4000)
             log_subagent("Web Fetcher", f"Extracted {len(clean_text)} chars of text with article URLs in 0.01s", INDICATOR_DONE)
             return {"id": action_id, "tool": tool_name, "status": "success", "result": clean_text}
             
         elif tool_name in ("identify_image", "inspect_image", "gorgons_gaze", "analyze_image"):
-            filepath = sanitized_params.get("filepath", sanitized_params.get("image_path", ""))
+            filepath = sanitized_params.get("filepath", sanitized_params.get("image_path", sanitized_params.get("path", sanitized_params.get("url", ""))))
             prompt = sanitized_params.get("prompt", "Describe this image in clear detail.")
-            log_subagent("Gorgon's Gaze", f"Inspecting visual asset '{Path(filepath).name}' with {VISION_MODEL_NAME}...", INDICATOR_THINKING)
+            
+            # If direct HTTP/HTTPS URL passed, auto-fetch to sandbox first
+            if isinstance(filepath, str) and filepath.startswith(("http://", "https://")):
+                url = filepath
+                url_path = urllib.parse.urlparse(url).path
+                fname = Path(url_path).name or "downloaded_image.jpg"
+                if not any(fname.lower().endswith(ext) for ext in (".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp")):
+                    fname = f"{fname}.jpg"
+                local_path = SANDBOX_DIR / fname
+                log_subagent("Image Downloader", f"Auto-fetching image URL '{url}' to '{local_path.name}'...", INDICATOR_THINKING)
+                resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AI-Agent-Thersites"}, timeout=15)
+                if resp.status_code == 200:
+                    with open(local_path, "wb") as f:
+                        f.write(resp.content)
+                    filepath = str(local_path)
+                    log_subagent("Image Downloader", f"Saved {round(len(resp.content)/1024, 1)} KB to '{local_path.name}'", INDICATOR_DONE)
+                else:
+                    return {
+                        "id": action_id,
+                        "tool": tool_name,
+                        "status": "error",
+                        "result": f"Failed to download image from '{url}': HTTP {resp.status_code}"
+                    }
+                    
+            p = Path(filepath).resolve()
+            if not p.exists():
+                if (SANDBOX_DIR / Path(filepath).name).exists():
+                    filepath = str((SANDBOX_DIR / Path(filepath).name).resolve())
+                elif (SANDBOX_DIR / filepath).exists():
+                    filepath = str((SANDBOX_DIR / filepath).resolve())
+                    
+            log_subagent("Vision Inspection", f"Inspecting visual asset '{Path(filepath).name}' with {VISION_MODEL_NAME}...", INDICATOR_THINKING)
             description, v_perf = query_ollama_vision(filepath, prompt)
             return {
                 "id": action_id,
@@ -532,6 +586,12 @@ def execute_tool_call(action: Dict[str, Any]) -> Dict[str, Any]:
         elif tool_name == "download_image":
             url = sanitized_params["url"]
             filepath = sanitized_params["filepath"]
+            p = Path(filepath)
+            if not p.is_absolute():
+                if not str(p).startswith("sandbox"):
+                    filepath = str(SANDBOX_DIR / p.name)
+                else:
+                    filepath = str((SANDBOX_DIR / p.name).resolve())
             log_subagent("Image Downloader", f"Fetching image '{url}'...", INDICATOR_THINKING)
             resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AI-Agent-Thersites"}, timeout=15)
             if resp.status_code == 200:
@@ -631,24 +691,25 @@ def run_agent_inner_loop(session_id: str, user_prompt: str, image_path: Optional
     
     effective_prompt = user_prompt
     if image_path and os.path.exists(image_path):
-        log_main(f"Visual asset attached: '{Path(image_path).name}'. Engaging Gorgon's Gaze...", INDICATOR_THINKING)
+        log_main(f"Visual asset attached: '{Path(image_path).name}'. Inspecting image...", INDICATOR_THINKING)
         try:
             vis_desc, v_perf = query_ollama_vision(image_path, user_prompt)
-            effective_prompt = f"[ATTACHED IMAGE: {Path(image_path).name} (Inspected by Gorgon's Gaze)]:\n{vis_desc}\n\nUser Request: {user_prompt}"
+            effective_prompt = f"[ATTACHED IMAGE: {Path(image_path).name} (Visually Inspected)]:\n{vis_desc}\n\nUser Request: {user_prompt}"
             yield {
                 "type": "scratch_step",
                 "turn": 0,
-                "action": "gorgons_gaze",
+                "action": "identify_image",
                 "status": "executed",
-                "details": f"Gorgon's Gaze inspected '{Path(image_path).name}' (Load: {v_perf['load_latency']}s | Latency: {v_perf['total_latency']}s | {v_perf['tok_per_sec']} tok/s)"
+                "details": f"Visually inspected '{Path(image_path).name}' (Load: {v_perf['load_latency']}s | Latency: {v_perf['total_latency']}s | {v_perf['tok_per_sec']} tok/s)"
             }
         except Exception as v_err:
-            log_main(f"Gorgon's Gaze Error: {v_err}", INDICATOR_BLOCKED)
+            log_main(f"Vision Inspection Error: {v_err}", INDICATOR_BLOCKED)
             effective_prompt = f"[ATTACHED IMAGE: {Path(image_path).name} (Inspection Failed: {str(v_err)})]\n\nUser Request: {user_prompt}"
 
     add_message(session_id, "user", effective_prompt)
     
     scratch_history = []
+    executed_tools_in_loop = set()
     final_response = ""
     is_error_response = False
     
@@ -681,12 +742,14 @@ def run_agent_inner_loop(session_id: str, user_prompt: str, image_path: Optional
             llm_messages.append({"role": m["role"], "content": m["content"]})
             
         for s in scratch_history:
-            if "warden_notice" in s:
+            if s.get("assistant_raw"):
+                llm_messages.append({"role": "assistant", "content": s["assistant_raw"]})
+            if s.get("warden_notice"):
                 llm_messages.append({"role": "user", "content": s["warden_notice"]})
-            if "results" in s:
-                res_summary = "\n".join([f"[TOOL RESULT '{r.get('tool')}']: {str(r.get('result'))[:4000]}" for r in s.get("results", [])])
+            if s.get("results"):
+                res_summary = "\n".join([f"[TOOL RESULT '{r.get('tool')}']: {str(r.get('result'))[:4000]}" for r in s["results"]])
                 llm_messages.append({"role": "user", "content": res_summary})
-            elif "error" in s:
+            elif s.get("error"):
                 llm_messages.append({"role": "user", "content": f"[SYSTEM ERROR]: {s['error']}"})
             
         if turn >= MAX_INNER_LOOP_TURNS - 1:
@@ -734,7 +797,10 @@ def run_agent_inner_loop(session_id: str, user_prompt: str, image_path: Optional
             thought = parsed["thought"]
             content = parsed["content"]
             actions = parsed["actions"]
-            final_response = content or thought
+            if content:
+                final_response = content
+            elif thought and thought != "Processing...":
+                final_response = thought
         except Exception as json_err:
             scratch_entry = add_scratch_message(session_id, turn, "json_parse_error", raw_output)
             scratch_id = scratch_entry.get("id", "N/A")
@@ -756,7 +822,6 @@ def run_agent_inner_loop(session_id: str, user_prompt: str, image_path: Optional
         actions, warden_defer_notice = enforce_single_action_rule(actions)
         if warden_defer_notice:
             log_main(warden_defer_notice, INDICATOR_BLOCKED)
-            scratch_history.append({"warden_notice": warden_defer_notice})
 
         yield {
             "type": "scratch_step",
@@ -768,27 +833,55 @@ def run_agent_inner_loop(session_id: str, user_prompt: str, image_path: Optional
         }
         
         action_results = []
-        has_external_action = False
+        has_executable_action = False
+        
+        READ_ONLY_TOOLS = {"list_internet_fav", "list_favorites", "get_room_temperatures", "read_file", "list_sandbox"}
         
         for act in actions:
             tool_name = act.get("tool", act.get("name", "")).strip().lower()
             if tool_name not in ("none", "finish", ""):
-                res = execute_tool_call(act)
+                if tool_name in READ_ONLY_TOOLS and tool_name in executed_tools_in_loop:
+                    log_main(f"[WARDEN ADVISORY]: Repeated query '{tool_name}' in Turn {turn}. Directing agent to synthesize answer.", INDICATOR_BLOCKED)
+                    res = {
+                        "id": act.get("id", "act_1"),
+                        "tool": tool_name,
+                        "status": "success",
+                        "result": f"[WARDEN ADVISORY]: Query '{tool_name}' was already executed and results are in your conversation history. Do not repeat this tool call. Formulate your answer to The Boss in 'content' and set actions: []."
+                    }
+                else:
+                    res = execute_tool_call(act)
+                    executed_tools_in_loop.add(tool_name)
+                    
                 action_results.append(res)
                 add_scratch_message(session_id, turn, res.get("tool", "unknown"), json.dumps(res))
-                # External actions require subsequent turn observation; memory actions (remember/unremember) are internal reflexes
-                if tool_name not in ("remember", "unremember", "list_internet_fav", "list_favorites"):
-                    has_external_action = True
+                has_executable_action = True
             
-        if action_results:
-            scratch_history.append({"actions_executed": actions, "results": action_results})
+        # Store assistant raw JSON along with tool results in scratch history for subsequent turns in this inner loop
+        scratch_history.append({
+            "turn": turn,
+            "assistant_raw": json.dumps({"thought": thought, "content": content, "actions": actions}),
+            "actions_executed": actions,
+            "results": action_results,
+            "warden_notice": warden_defer_notice
+        })
             
-        # If there are NO pending external toolkit actions, the task is COMPLETE! Terminate the loop immediately.
-        if not has_external_action:
-            log_main(f"Inner Loop Terminated cleanly on Turn {turn} (Task completed without pending external observations).", INDICATOR_DONE)
+        # If the agent emitted NO executable actions (actions: [] or none/finish), the task is COMPLETE! Terminate loop.
+        if not has_executable_action:
+            log_main(f"Inner Loop Terminated cleanly on Turn {turn} (Agent finished task with actions: []).", INDICATOR_DONE)
             break
         
     if not is_error_response:
+        if not final_response or final_response == "Processing...":
+            for s in reversed(scratch_history):
+                for r in s.get("results", []):
+                    if r.get("tool") in ("identify_image", "inspect_image", "gorgons_gaze", "analyze_image") and r.get("status") == "success":
+                        final_response = f"Boss! Here is the visual analysis:\n\n{r.get('result')}"
+                        break
+                if final_response and final_response != "Processing...":
+                    break
+            if not final_response or final_response == "Processing...":
+                final_response = "I have completed processing your request, Boss!"
+                
         final_msg = add_message(session_id, "assistant", final_response)
         log_main(f"Outer Loop Complete. Message #{final_msg['sequence_id']} saved.", INDICATOR_DONE)
         yield {

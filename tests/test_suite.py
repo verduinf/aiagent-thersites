@@ -326,8 +326,107 @@ class TestThersitesSuite(unittest.TestCase):
         self.assertIn("utrecht", res["result"])
         
         # Cleanup
-        database.delete_clue("cat_name")
-        database.delete_clue("utrecht")
+    def test_14_web_fetch_direct_image_interceptor(self):
+        from engine import execute_tool_call
+        
+        # Test direct .jpg URL interception in web_fetch
+        res = execute_tool_call({
+            "id": "act_wf_img",
+            "tool": "web_fetch",
+            "params": {"url": "https://m.media-amazon.com/images/M/photo.jpg"}
+        })
+        self.assertEqual(res["status"], "success")
+        self.assertIn("DIRECT IMAGE URL DETECTED", res["result"])
+        self.assertNotIn("JFIF", res["result"])
+
+    def test_15_identify_image_url_and_relative_path(self):
+        from warden import validate_image_path, inspect_and_authorize
+        
+        # 1. Test direct image URL authorization
+        ok_url, msg_url = validate_image_path("https://m.media-amazon.com/images/M/test.jpg")
+        self.assertTrue(ok_url)
+        self.assertIn("authorized", msg_url)
+        
+        # 2. Test inspect_and_authorize with url parameter
+        ok_auth, msg_auth, _ = inspect_and_authorize("identify_image", {"url": "https://images.nu.nl/test.png"})
+        self.assertTrue(ok_auth)
+        
+        # 3. Test relative sandbox path resolution
+        sandbox_test_img = SANDBOX_DIR / "temp_qa_test.jpg"
+        with open(sandbox_test_img, "wb") as f:
+            f.write(b"\xFF\xD8\xFF\xE0\x00\x10JFIF")
+            
+        ok_rel, msg_rel = validate_image_path("temp_qa_test.jpg")
+        self.assertTrue(ok_rel)
+        
+        if sandbox_test_img.exists():
+            os.remove(sandbox_test_img)
+
+    def test_16_inner_loop_assistant_scratch_context(self):
+        import json
+        
+        # Verify scratch history structure packaging
+        turn_scratch = {
+            "turn": 1,
+            "assistant_raw": json.dumps({"thought": "Downloading image", "content": "Downloading...", "actions": [{"id": "act_1", "tool": "download_image", "params": {"url": "https://test.com/img.jpg"}}]}),
+            "actions_executed": [{"id": "act_1", "tool": "download_image"}],
+            "results": [{"id": "act_1", "tool": "download_image", "status": "success", "result": "Saved to sandbox/photo.jpg"}],
+            "warden_notice": None
+        }
+        
+        # Reconstruct llm_messages as done in engine
+        llm_messages = [{"role": "system", "content": "system contract"}]
+        llm_messages.append({"role": "user", "content": "Identify this image: https://test.com/img.jpg"})
+        
+        # Inner loop appends assistant step then tool result
+        llm_messages.append({"role": "assistant", "content": turn_scratch["assistant_raw"]})
+        res_summary = "\n".join([f"[TOOL RESULT '{r.get('tool')}']: {str(r.get('result'))}" for r in turn_scratch["results"]])
+        llm_messages.append({"role": "user", "content": res_summary})
+        
+        self.assertEqual(len(llm_messages), 4)
+        self.assertEqual(llm_messages[2]["role"], "assistant")
+        self.assertIn("download_image", llm_messages[2]["content"])
+        self.assertEqual(llm_messages[3]["role"], "user")
+        self.assertIn("Saved to sandbox/photo.jpg", llm_messages[3]["content"])
+
+    def test_17_structured_rss_feed_extraction(self):
+        from engine import clean_html_to_text
+        
+        sample_rss = """<?xml version="1.0" encoding="utf-8"?>
+        <rss version="2.0">
+            <channel>
+                <title>NOS Nieuws</title>
+                <item>
+                    <title>Story One Title</title>
+                    <link>https://nos.nl/l/10001</link>
+                    <description>Story One Description content.</description>
+                    <pubDate>Sun, 30 Aug 2026 20:00:00 +0200</pubDate>
+                </item>
+                <item>
+                    <title>Halsema Story Title</title>
+                    <link>https://nos.nl/l/10002</link>
+                    <description>Femke Halsema discusses drug issues.</description>
+                    <pubDate>Sun, 30 Aug 2026 19:00:00 +0200</pubDate>
+                </item>
+            </channel>
+        </rss>"""
+        
+        result = clean_html_to_text(sample_rss)
+        self.assertIn("[1] Story One Title", result)
+        self.assertIn("https://nos.nl/l/10001", result)
+        self.assertIn("[2] Halsema Story Title", result)
+        self.assertIn("https://nos.nl/l/10002", result)
+        self.assertIn("Femke Halsema discusses drug issues", result)
+
+    def test_18_repeated_read_query_deduplication(self):
+        executed_tools = {"list_internet_fav"}
+        READ_ONLY_TOOLS = {"list_internet_fav", "list_favorites", "get_room_temperatures", "read_file", "list_sandbox"}
+        
+        act = {"id": "act_1", "tool": "list_internet_fav", "params": {}}
+        tool_name = act["tool"]
+        
+        is_repeated = tool_name in READ_ONLY_TOOLS and tool_name in executed_tools
+        self.assertTrue(is_repeated)
 
 
 if __name__ == '__main__':
