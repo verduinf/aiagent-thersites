@@ -141,7 +141,7 @@ document.addEventListener("DOMContentLoaded", () => {
             
             const isUser = m.role === 'user';
             const author = isUser ? "The Boss" : "Thersites (Intern)";
-            const avatarIcon = isUser ? "??" : '<img src="/static/images/thersites.png" class="msg-avatar-thumb" alt="Thersites">';
+            const avatarIcon = isUser ? "&#128104;" : '<img src="/static/images/thersites.png" class="msg-avatar-thumb" alt="Thersites">';
             
             const isPinned = m.is_pinned === 1;
             const pinClass = isPinned ? "pinned" : "";
