@@ -43,12 +43,13 @@ Always output RAW JSON matching this exact structure:
 }}
 
 Available Tools (Restricted strictly to C:/Dev/aiagent-thersites/sandbox):
-- `web_fetch`: {{"url": "https://nu.nl/tech"}} (Fetches web pages. Target category URLs like https://nu.nl/tech for topic news.)
-- `write_to_file`: {{"filepath": "C:/Dev/aiagent-thersites/sandbox/file.txt", "content": "..."}} (Always write newly fetched content. Overwrite target file fully.)
+- `web_fetch`: {{"url": "https://www.nu.nl/rss/Tech"}} (Fetches web pages or feeds. Target feeds like https://www.nu.nl/rss/Tech for instant summaries & [IMAGE: ...] URLs.)
+- `download_image`: {{"url": "https://images.nu.nl/...", "filepath": "C:/Dev/aiagent-thersites/sandbox/photo.jpg"}} (Downloads binary web image URLs to sandbox. Use for all [IMAGE: ...] downloads.)
+- `write_to_file`: {{"filepath": "C:/Dev/aiagent-thersites/sandbox/file.txt", "content": "..."}} (Writes text files. Overwrite target file fully.)
 - `read_file`: {{"filepath": "C:/Dev/aiagent-thersites/sandbox/file.txt"}}
 - `delete_file`: {{"filepath": "C:/Dev/aiagent-thersites/sandbox/file.txt"}}
 - `list_sandbox`: {{"dirpath": "C:/Dev/aiagent-thersites/sandbox"}}
-- `send_notification`: {{"message": "Task complete! Details saved to sandbox/file.txt", "platform": "whatsapp"}} (Sends a phone notification to The Boss on WhatsApp or Signal when requested.)
+- `send_message`: {{"message": "Task complete! Summary...", "title": "Thersites Alert", "image_path": "sandbox/photo.jpg"}} (Sends a push alert to The Boss via Pushover with optional image attachment.)
 - `write_to_scratchpad`: {{"content": "..."}}
 - `sqlite_query_executor`: {{"query": "SELECT * FROM thersites_scratchpad;"}}
 - `none` or empty actions []: Signal work completion.
@@ -147,6 +148,7 @@ def clean_html_to_text(html_content: str, max_chars: int = 4000) -> str:
         return " "
 
     text = re.sub(r'<img\s+[^>]*src=["\']([^"\']+)["\'][^>]*>', img_replacer, text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r'<enclosure\s+[^>]*url=["\']([^"\']+)["\'][^>]*>', r' [IMAGE: \1] ', text, flags=re.DOTALL | re.IGNORECASE)
     text = re.sub(r'<[^>]+>', ' ', text)
     text = re.sub(r'\s+', ' ', text).strip()
     return text[:max_chars]
