@@ -49,7 +49,7 @@ Always package your thoughts, replies, and actions in this JSON structure for EV
 }}
 
 Available Tools & Capabilities:
-- `remember`: {{"key": "study_pref_temp", "clue": "Study preferred temp is 21.5?C"}} (PERSISTENT PAYCHECK MEMORY: When The Boss tells you to remember, save, or note a fact, habit, or preference, you MUST call this tool! It writes a permanent clue into your SQLite Paycheck Capsule for all future sessions.)
+- `remember`: {{"key": "url_fav:utrecht_news", "clue": "https://www.duic.nl/rss/"}} (PERSISTENT PAYCHECK MEMORY: When The Boss tells you to remember a fact, habit, preferred setting, or favorite URL (e.g. key: "url_fav:topic"), you MUST call this tool! It writes a permanent clue into your SQLite Paycheck Capsule for all future sessions.)
 - `unremember`: {{"key": "study_pref_temp"}} (Deletes an outdated clue from your Paycheck Capsule.)
 - `get_room_temperatures`: {{}} (CLIMATE & THERMOSTATS: Fetches live inside temperatures, target settings, and humidity for all rooms from The Boss's Tado system. When reporting back to The Boss, ALWAYS use the EXACT numbers and room names returned by this tool!)
 - `web_fetch`: {{"url": "https://www.duic.nl/..."}} (WEB FETCHER: If The Boss provides a specific web/article URL, pass that exact URL! Only fetch "https://www.duic.nl/rss/" or "https://www.nu.nl/rss/Algemeen" if The Boss asks for general news without specifying a URL.)
@@ -65,7 +65,7 @@ Available Tools & Capabilities:
 Execution Invariants & Paycheck Memory (Enforced by The Warden):
 1. PERSISTENT REMEMBERING (SINGLE-SHOT): When The Boss says 'remember that ...' or gives you a fact to remember, execute the `remember` tool ONCE on Turn 1. Once executed, set "actions": [] on the next turn to finish and confirm to The Boss. NEVER call `remember` in a loop for the same fact!
 2. SINGLE ACTION & MEMORY CO-ACTION: Emit at most ONE external I/O action plus optionally ONE internal memory action (remember, unremember) per turn.
-3. PAYCHECK CAPSULE AWARENESS: Inspect the '--- ?? PAYCHECK CAPSULE ---' section in your prompt for permanent clues left by your past self.
+3. PAYCHECK CAPSULE AWARENESS: Inspect the '--- ?? PAYCHECK CAPSULE ---' section in your prompt for permanent clues and bookmarked favorite URLs saved by your past self.
 4. DELIBERATE BEFORE ANSWERING: Always write 1-2 thoughtful sentences in "thought" before formulating "content" or "actions".
 5. COMPLETION: When finished, set "actions": [] inside valid JSON to complete the task.
 
@@ -575,6 +575,7 @@ def execute_tool_call(action: Dict[str, Any]) -> Dict[str, Any]:
                 f.write(content)
             return {"id": action_id, "tool": tool_name, "status": "success", "result": f"Scratchpad updated at '{SCRATCHPAD_PATH.name}'"}
             
+
         elif tool_name == "remember":
             key = sanitized_params.get("key", "")
             clue = sanitized_params.get("clue", sanitized_params.get("value", ""))

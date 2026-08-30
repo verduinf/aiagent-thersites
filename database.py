@@ -298,3 +298,15 @@ def get_all_clues(limit: int = 10) -> List[Dict[str, Any]]:
             ORDER BY updated_at DESC LIMIT ?
         """, (limit,)).fetchall()
         return [{"key": r["key"], "value": r["value"], "updated_at": r["updated_at"]} for r in rows]
+
+def save_favorite(topic: str, url: str) -> Dict[str, Any]:
+    """Saves a bookmarked favorite topic URL into thersites_scratchpad."""
+    clean_topic = str(topic).strip().lower().replace(" ", "_")
+    key = f"fav_{clean_topic}" if not clean_topic.startswith("fav_") else clean_topic
+    return save_clue(key, url.strip())
+
+def delete_favorite(topic: str) -> bool:
+    """Deletes a bookmarked favorite topic URL from thersites_scratchpad."""
+    clean_topic = str(topic).strip().lower().replace(" ", "_")
+    key = f"fav_{clean_topic}" if not clean_topic.startswith("fav_") else clean_topic
+    return delete_clue(key)

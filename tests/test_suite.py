@@ -55,13 +55,27 @@ class TestThersitesSuite(unittest.TestCase):
         res2 = toggle_message_pin(msg_id)
         self.assertEqual(res2["is_pinned"], 0)
 
-    def test_03_warden_nu_nl_whitelist(self):
-        ok, msg, params = inspect_and_authorize("web_fetch", {"url": "https://nu.nl/tech"})
-        self.assertTrue(ok)
+    def test_03_warden_ssrf_and_blacklist_protection(self):
+        # Public domains are authorized
+        ok_nu, msg_nu, _ = inspect_and_authorize("web_fetch", {"url": "https://nu.nl/tech"})
+        self.assertTrue(ok_nu)
         
-        ok, msg, params = inspect_and_authorize("web_fetch", {"url": "https://python.org"})
-        self.assertFalse(ok)
-        self.assertIn("Unauthorized domain", msg)
+        ok_wiki, msg_wiki, _ = inspect_and_authorize("web_fetch", {"url": "https://wikipedia.org/wiki/Utrecht"})
+        self.assertTrue(ok_wiki)
+        
+        # SSRF Private IPs and Localhost are blocked
+        ok_local, msg_local, _ = inspect_and_authorize("web_fetch", {"url": "http://127.0.0.1:8000/api/secret"})
+        self.assertFalse(ok_local)
+        self.assertIn("blocked", msg_local.lower())
+        
+        ok_priv, msg_priv, _ = inspect_and_authorize("web_fetch", {"url": "http://192.168.1.1/admin"})
+        self.assertFalse(ok_priv)
+        self.assertIn("blocked", msg_priv.lower())
+        
+        # Invalid protocol blocked
+        ok_file, msg_file, _ = inspect_and_authorize("web_fetch", {"url": "file:///C:/passwords.txt"})
+        self.assertFalse(ok_file)
+        self.assertIn("blocked", msg_file.lower())
 
     def test_04_warden_sandbox_crud(self):
         sandbox_file = str(SANDBOX_DIR / "intern_test.txt")
@@ -169,13 +183,13 @@ class TestThersitesSuite(unittest.TestCase):
         self.assertTrue(ok)
         self.assertIn("authorized", msg.lower())
 
-        # Test unauthorized domain blocked
+        # Test private IP / SSRF domain blocked for image download
         ok, msg, params = inspect_and_authorize("download_image", {
-            "url": "https://malicious.com/virus.exe",
+            "url": "http://127.0.0.1:8000/internal_image.png",
             "filepath": target_img
         })
         self.assertFalse(ok)
-        self.assertIn("unauthorized domain", msg.lower())
+        self.assertIn("blocked", msg.lower())
 
         # 2. Test Engine execution with mocked download
         from engine import execute_tool_call
@@ -289,6 +303,27 @@ class TestThersitesSuite(unittest.TestCase):
         if test_img_path.exists():
             ok_auth, msg_auth, _ = inspect_and_authorize("identify_image", {"filepath": str(test_img_path), "prompt": "Describe"})
             self.assertTrue(ok_auth)
+
+
+
+    def test_13_url_fav_memory_and_ssrf(self):
+        import database
+        from engine import execute_tool_call
+        
+        # 1. Test saving url_fav via remember tool
+        res = execute_tool_call({
+            "id": "act_mem_url",
+            "tool": "remember",
+            "params": {"key": "url_fav:utrecht_news", "clue": "https://www.duic.nl/rss/"}
+        })
+        self.assertEqual(res["status"], "success")
+        self.assertIn("Clue saved", res["result"])
+        
+        clues = database.get_all_clues()
+        self.assertTrue(any(c["key"] == "url_fav:utrecht_news" and "duic.nl" in c["value"] for c in clues))
+        
+        # Cleanup
+        database.delete_clue("url_fav:utrecht_news")
 
 
 if __name__ == '__main__':

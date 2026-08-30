@@ -5,7 +5,10 @@ Enforces sandbox enclosure, domain whitelisting, and SQL table mutation rules.
 import os
 import re
 from pathlib import Path
-from config import BASE_DIR, SANDBOX_DIR, UPLOADS_DIR, URL_DOMAIN_WHITELIST
+import ipaddress
+import socket
+import urllib.parse
+from config import BASE_DIR, SANDBOX_DIR, UPLOADS_DIR, URL_DOMAIN_BLACKLIST
 
 from typing import Tuple, Dict, Any, List, Optional
 
@@ -66,12 +69,40 @@ def validate_url(url: str) -> Tuple[bool, str]:
     if not url or not isinstance(url, str):
         return False, "Invalid or missing URL parameter."
         
-    for domain in URL_DOMAIN_WHITELIST:
-        pattern = rf"^https?://(?:[a-zA-Z0-9-]+\.)*{re.escape(domain)}(?:/.*)?$"
-        if re.match(pattern, url, re.IGNORECASE):
-            return True, f"Domain '{domain}' authorized by The Warden."
+    try:
+        parsed = urllib.parse.urlparse(url)
+        if parsed.scheme not in ("http", "https"):
+            return False, f"Protocol '{parsed.scheme}' blocked. Only 'http://' and 'https://' are authorized."
             
-    return False, f"Unauthorized domain '{url}'. URL must be in whitelist: {URL_DOMAIN_WHITELIST}"
+        hostname = parsed.hostname
+        if not hostname:
+            return False, "URL missing valid hostname."
+            
+        hostname_clean = hostname.strip().lower()
+        
+        # 1. Check explicit domain blacklist
+        for blocked_domain in URL_DOMAIN_BLACKLIST:
+            if hostname_clean == blocked_domain.lower() or hostname_clean.endswith(f".{blocked_domain.lower()}"):
+                return False, f"Access to '{hostname_clean}' blocked by Warden Security Policy (Blacklisted Domain)."
+                
+        # 2. Check SSRF / Private IP resolution
+        try:
+            ip_obj = ipaddress.ip_address(hostname_clean)
+            if ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_link_local or ip_obj.is_reserved or ip_obj.is_unspecified:
+                return False, f"Access to private/local IP '{ip_obj}' blocked by Warden SSRF Guardrail."
+        except ValueError:
+            try:
+                resolved_ip = socket.gethostbyname(hostname_clean)
+                ip_obj = ipaddress.ip_address(resolved_ip)
+                if ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_link_local or ip_obj.is_reserved or ip_obj.is_unspecified:
+                    return False, f"Domain '{hostname_clean}' resolves to private/local IP '{resolved_ip}' (Blocked by Warden SSRF Guardrail)."
+            except Exception:
+                if hostname_clean in ("localhost", "127.0.0.1", "0.0.0.0") or hostname_clean.startswith("192.168.") or hostname_clean.startswith("10."):
+                    return False, f"Access to '{hostname_clean}' blocked by Warden SSRF Guardrail."
+                    
+        return True, f"URL '{url}' authorized for web access."
+    except Exception as e:
+        return False, f"URL validation error: {str(e)}"
 
 def validate_write_path(filepath: str) -> Tuple[bool, str]:
     if not filepath or not isinstance(filepath, str):
