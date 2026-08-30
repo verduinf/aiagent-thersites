@@ -481,7 +481,7 @@ def run_agent_inner_loop(session_id: str, user_prompt: str, think_mode: bool = F
         
         sys_content = f"{SYSTEM_CONTRACT}\n\n{telemetry_tag}"
         if pinned_text:
-            sys_content += f"\n\n--- PINNED CONTEXT ANCHORS ---\n{pinned_text}"
+            sys_content += f"\n\n--- ?? PINNED CONTEXT ANCHORS (Active UI Pins from The Boss) ---\n{pinned_text}\n(These are the exact messages The Boss pinned in the UI for your reference.)"
             
         llm_messages = [{"role": "system", "content": sys_content}]
         
