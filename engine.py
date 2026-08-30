@@ -464,7 +464,7 @@ def execute_tool_call(action: Dict[str, Any]) -> Dict[str, Any]:
             from database import save_clue
             res = save_clue(key, clue)
             log_subagent("Memory Capsule", f"Saved clue '{res['key']}': '{res['value']}'", INDICATOR_DONE)
-            return {"id": action_id, "tool": tool_name, "status": "success", "result": f"Clue saved to Paycheck Capsule: [{res['key']}] -> {res['value']}. (Memory is securely locked in SQLite. Set actions: [] on your next turn to confirm to The Boss!)"}
+            return {"id": action_id, "tool": tool_name, "status": "success", "result": f"Clue saved to Paycheck Capsule: [{res['key']}] -> {res['value']}"}
 
         elif tool_name == "unremember":
             key = sanitized_params.get("key", "")
