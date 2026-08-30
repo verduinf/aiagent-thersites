@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Local Intern Thersites - Local Console</title>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📜</text></svg>">
-    <link rel="stylesheet" href="/static/style.css&bull;v=9">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>???</text></svg>">
+    <link rel="stylesheet" href="/static/style.css?v=12">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -14,24 +14,17 @@
     <div class="app-container">
         <header class="app-header">
             <div class="header-left">
-                <div class="logo-icon">📜</div>
-                <div class="header-titles">
-                    <h1>Local Intern Thersites</h1>
-                    <span class="sub-title">The Local Intern Console (Qwen3.5-9B)</span>
-                </div>
-            </div>
-            <div class="header-center">
-                <label for="sessionSelect" style="color: var(--text-muted); font-size: 0.85rem;">Session:</label>
-                <select id="sessionSelect" class="session-dropdown"></select>
-                <button id="newSessionBtn" class="btn btn-secondary">+ New Session</button>
-            </div>
-            <div class="header-right">
                 <div class="status-indicator">
                     <span class="status-dot"></span>
                     <span class="status-text">qwen3.5:9b</span>
                 </div>
-                <div class="perf-tag" id="perfTag">⚡ -- tok/s</div>
+                <div class="perf-tag" id="perfTag">? -- tok/s</div>
                 <div class="rolling-badge" id="rollingBadge">Rolling: 0 / 20k</div>
+            </div>
+            <div class="header-right">
+                <label for="sessionSelect" style="color: var(--text-muted); font-size: 0.85rem;">Session:</label>
+                <select id="sessionSelect" class="session-dropdown"></select>
+                <button id="newSessionBtn" class="btn btn-secondary">+ New Session</button>
             </div>
         </header>
 
@@ -52,14 +45,14 @@
                     <div class="intern-info">
                         <div class="intern-name">Thersites</div>
                         <div class="intern-role">Local AI Intern</div>
-                        <div class="intern-spec">Qwen3.5-9B &bull; GBNF JSON</div>
+                        <div class="intern-spec">Qwen3.5-9B ? GBNF JSON</div>
                     </div>
                 </div>
             </aside>
 
             <main class="timeline-area">
                 <div class="timeline-header">
-                    <h2>📜 Conversation Timeline (Full History from Msg #1)</h2>
+                    <h2>?? Conversation Timeline (Full History from Msg #1)</h2>
                 </div>
                 
                 <div class="timeline-container" id="timelineContainer">
@@ -68,8 +61,8 @@
 
                 <div class="scratchpad-accordion" id="scratchpadAccordion">
                     <div class="accordion-header" id="accordionHeader">
-                        <span class="accordion-title">🟡 Intern is thinking... (Turn 1/5)</span>
-                        <span class="accordion-icon">▼</span>
+                        <span class="accordion-title">?? Intern is thinking... (Turn 1/5)</span>
+                        <span class="accordion-icon">?</span>
                     </div>
                     <div class="accordion-body" id="accordionBody">
                         <!-- Live SSE Scratch Steps -->
@@ -78,12 +71,12 @@
 
                 <form class="chat-input-form" id="chatForm">
                     <textarea id="promptInput" placeholder="Give Thersites an instruction (or leave blank to run pinned instructions)..." rows="2"></textarea>
-                    <button type="submit" id="sendBtn" class="btn btn-primary">Send Prompt 🚀</button>
+                    <button type="submit" id="sendBtn" class="btn btn-primary">Send Prompt ??</button>
                 </form>
             </main>
         </div>
     </div>
 
-    <script src="/static/app.js&bull;v=9"></script>
+    <script src="/static/app.js?v=12"></script>
 </body>
 </html>
