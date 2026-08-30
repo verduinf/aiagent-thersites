@@ -215,9 +215,9 @@ def query_ollama(messages: List[Dict[str, str]], model: str = MODEL_NAME, think_
     headers = {"Content-Type": "application/json"}
     
     total_chars = sum(len(m.get("content", "")) for m in messages)
-    # Ensure num_ctx has at least 2048 tokens of headroom above prompt size
-    estimated_prompt_tokens = int(total_chars / 3.2) + 500
-    dynamic_num_ctx = max(NUM_CTX, estimated_prompt_tokens + 2048, 8192)
+    # Ultra-lean dynamic context scaling: lean 2048 baseline, expanding dynamically with prompt + 1024 headroom
+    estimated_prompt_tokens = int(total_chars / 3.2) + 200
+    dynamic_num_ctx = max(2048, estimated_prompt_tokens + 1024)
     
     payload = {
         "model": model,
