@@ -5,7 +5,7 @@ This repository houses **AI Agent Thersites**: an autonomous, locally-hosted AI 
 
 ### Model Governance & Naming Policy
 * **STRICT NO-FALLBACK RULE**: Thersites operates **exclusively** on `qwen3.5:9b`. There are **zero** model fallbacks or auto-routers. Thersites either shows up for work or he doesn't.
-* **NAMING PARADIGM**: The mortal intern is strictly named **Thersites** (never Therp or Therpl). `Therp` 🦜 is exclusively the development prompt-tuner skill script (`.agents/skills/thersites-proxy/`).
+* **NAMING PARADIGM**: The mortal intern is strictly named **Thersites**
 
 ---
 
