@@ -1,8 +1,13 @@
-﻿"""
+"""
 Colorized ANSI Terminal Logger for AI Agent Thersites
 Provides visual indicators for main loop operations, subagents, telemetry, and performance.
 """
 import sys
+try:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
 from config import VERBOSE
 
 INDICATOR_DONE = "🟢 [DONE]"

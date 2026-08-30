@@ -85,6 +85,12 @@ def inspect_and_authorize(tool_name: str, params: Dict[str, Any]) -> Tuple[bool,
         ok, msg = validate_sql_query(query)
         return ok, msg, params
         
+    elif tool_name in ("send_pushover_alert", "send_notification", "send_push_notification"):
+        msg = params.get("message", params.get("text", ""))
+        if not msg:
+            return False, "Missing required 'message' parameter.", params
+        return True, "Pushover notification authorized by The Warden.", params
+        
     elif tool_name in ("write_to_scratchpad", "none", "finish", ""):
         return True, "Authorized action.", params
         

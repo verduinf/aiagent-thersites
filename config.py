@@ -1,4 +1,4 @@
-﻿"""
+"""
 Central Configuration Loader for AI Agent Thersites
 Loads settings from config.json with environment variable overrides and CLI flags.
 """
@@ -8,6 +8,21 @@ import json
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
+ENV_PATH = BASE_DIR / ".env"
+if ENV_PATH.exists():
+    try:
+        with open(ENV_PATH, "r", encoding="utf-8-sig") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    k = k.strip()
+                    v = v.strip().strip('"').strip("'")
+                    if k not in os.environ:
+                        os.environ[k] = v
+    except Exception as e:
+        print(f"Warning: Failed to load .env ({e})")
+
 CONFIG_JSON_PATH = BASE_DIR / "config.json"
 
 config_data = {}
@@ -26,6 +41,10 @@ ROLLING_BUFFER_CHAR_LIMIT = int(os.environ.get("ROLLING_BUFFER_CHAR_LIMIT", conf
 PINNED_CONTEXT_CHAR_LIMIT = int(os.environ.get("PINNED_CONTEXT_CHAR_LIMIT", config_data.get("PINNED_CONTEXT_CHAR_LIMIT", 5000)))
 MAX_INNER_LOOP_TURNS = int(os.environ.get("MAX_INNER_LOOP_TURNS", config_data.get("MAX_INNER_LOOP_TURNS", 5)))
 URL_DOMAIN_WHITELIST = config_data.get("URL_DOMAIN_WHITELIST", ["nu.nl"])
+PUSHOVER_USER_KEY = os.environ.get("PUSHOVER_USER_KEY", config_data.get("PUSHOVER_USER_KEY", ""))
+PUSHOVER_API_TOKEN = os.environ.get("PUSHOVER_API_TOKEN", os.environ.get("PUSHOVER_API", config_data.get("PUSHOVER_API_TOKEN", "")))
+PUSHOVER_EMAIL = os.environ.get("PUSHOVER_EMAIL", config_data.get("PUSHOVER_EMAIL", ""))
+
 
 VERBOSE = "--verbose" in sys.argv or os.environ.get("VERBOSE") == "1" or config_data.get("VERBOSE", False)
 

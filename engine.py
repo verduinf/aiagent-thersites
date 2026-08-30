@@ -1,4 +1,4 @@
-﻿"""
+"""
 Dual-Loop Agentic Orchestrator & Ollama Client for AI Agent Thersites
 Handles prompt assembly, Turn-1 telemetry, fuzzy JSON parsing, fast HTML text extraction with link preservation, and inner/outer execution loops.
 """
@@ -9,10 +9,13 @@ import time
 import requests
 from pathlib import Path
 from typing import Dict, Any, List, Generator, Tuple
+import urllib.parse
+import urllib.request
 from config import (
     OLLAMA_BASE_URL, MODEL_NAME, KEEP_AI_ALIVE, NUM_CTX,
     ROLLING_BUFFER_CHAR_LIMIT, PINNED_CONTEXT_CHAR_LIMIT,
-    MAX_INNER_LOOP_TURNS, SCRATCHPAD_PATH, SANDBOX_DIR, VERBOSE
+    MAX_INNER_LOOP_TURNS, SCRATCHPAD_PATH, SANDBOX_DIR, VERBOSE,
+    PUSHOVER_USER_KEY, PUSHOVER_API_TOKEN
 )
 from database import (
     get_pinned_messages, get_rolling_messages, add_message,
@@ -45,6 +48,7 @@ Available Tools (Restricted strictly to C:/Dev/aiagent-thersites/sandbox):
 - `read_file`: {{"filepath": "C:/Dev/aiagent-thersites/sandbox/file.txt"}}
 - `delete_file`: {{"filepath": "C:/Dev/aiagent-thersites/sandbox/file.txt"}}
 - `list_sandbox`: {{"dirpath": "C:/Dev/aiagent-thersites/sandbox"}}
+- `send_notification`: {{"message": "Task complete! Details saved to sandbox/file.txt", "platform": "whatsapp"}} (Sends a phone notification to The Boss on WhatsApp or Signal when requested.)
 - `write_to_scratchpad`: {{"content": "..."}}
 - `sqlite_query_executor`: {{"query": "SELECT * FROM thersites_scratchpad;"}}
 - `none` or empty actions []: Signal work completion.
@@ -224,6 +228,62 @@ def query_ollama(messages: List[Dict[str, str]], model: str = MODEL_NAME, think_
         log_main(f"Ollama connection error: {e}", INDICATOR_BLOCKED)
         raise RuntimeError(f"Ollama connection error: {str(e)}")
 
+
+def dispatch_pushover_notification(message: str, title: str = "Thersites Agent", image_path: str = None, priority: int = 0) -> Tuple[bool, str]:
+    user_key = (PUSHOVER_USER_KEY or "").strip()
+    api_token = (PUSHOVER_API_TOKEN or "").strip()
+    
+    if not user_key or not api_token:
+        img_info = f" with image '{image_path}'" if image_path else ""
+        sim_msg = f"[SIMULATION] PUSHOVER alert dispatched: \"{message}\"{img_info} (Configure PUSHOVER_USER_KEY and PUSHOVER_API_TOKEN in config.json to enable live push delivery)."
+        log_subagent("Pushover", sim_msg, INDICATOR_DONE)
+        return True, sim_msg
+        
+    payload = {
+        "token": api_token,
+        "user": user_key,
+        "title": title,
+        "message": message,
+        "priority": priority,
+        "url": "http://localhost:8000",
+        "url_title": "Open Thersites UI",
+        "sound": "magic"
+    }
+    
+    files = None
+    file_handle = None
+    if image_path:
+        resolved_img = Path(image_path)
+        if not resolved_img.is_absolute():
+            resolved_img = SANDBOX_DIR / image_path
+            
+        if resolved_img.exists() and resolved_img.is_file():
+            file_handle = open(resolved_img, "rb")
+            files = {"attachment": (resolved_img.name, file_handle)}
+        else:
+            log_subagent("Pushover", f"Image file '{image_path}' not found on disk. Sending text alert.", INDICATOR_THINKING)
+            
+    try:
+        log_subagent("Pushover", f"Pushing alert '{title}' to The Boss's device...", INDICATOR_THINKING)
+        resp = requests.post("https://api.pushover.net/1/messages.json", data=payload, files=files, timeout=15)
+        if file_handle:
+            file_handle.close()
+            
+        if resp.status_code == 200:
+            success_msg = "Successfully dispatched Pushover alert to The Boss's phone."
+            log_subagent("Pushover", success_msg, INDICATOR_DONE)
+            return True, success_msg
+        else:
+            fail_msg = f"Pushover HTTP {resp.status_code}: {resp.text}"
+            log_subagent("Pushover", fail_msg, INDICATOR_BLOCKED)
+            return False, fail_msg
+    except Exception as e:
+        if file_handle:
+            file_handle.close()
+        err_msg = f"Failed to dispatch Pushover alert: {str(e)}"
+        log_subagent("Pushover", err_msg, INDICATOR_BLOCKED)
+        return False, err_msg
+
 def execute_tool_call(action: Dict[str, Any]) -> Dict[str, Any]:
     tool_name = action.get("tool", action.get("name", "none"))
     params = action.get("params", {})
@@ -280,6 +340,17 @@ def execute_tool_call(action: Dict[str, Any]) -> Dict[str, Any]:
             query = sanitized_params["query"]
             sql_results = execute_user_sql_query(query)
             return {"id": action_id, "tool": tool_name, "status": "success", "result": sql_results}
+            
+
+            
+        elif tool_name in ("send_pushover_alert", "send_notification", "send_push_notification"):
+            msg = sanitized_params.get("message", sanitized_params.get("text", "Task execution completed."))
+            title = sanitized_params.get("title", "Thersites Agent")
+            img_path = sanitized_params.get("image_path", sanitized_params.get("image", None))
+            priority = int(sanitized_params.get("priority", 0))
+            ok, dispatch_result = dispatch_pushover_notification(msg, title=title, image_path=img_path, priority=priority)
+            status = "success" if ok else "error"
+            return {"id": action_id, "tool": tool_name, "status": status, "result": dispatch_result}
             
         elif tool_name in ("none", "finish", ""):
             return {"id": action_id, "tool": "none", "status": "success", "result": "Inner loop finished."}

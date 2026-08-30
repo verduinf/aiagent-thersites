@@ -1,4 +1,4 @@
-﻿"""
+"""
 Argus Test Suite Guardian — AI Agent Thersites Test Suite
 Verifies SQLite storage, multi-session management, The Warden guardrail rules,
 JSON fuzzy extraction, SQL query safety, and Turn-1 telemetry.
@@ -121,6 +121,27 @@ class TestThersitesSuite(unittest.TestCase):
         all_msgs = get_all_messages(session_id)
         msg_ids = [m["id"] for m in all_msgs]
         self.assertNotIn(msg_id, msg_ids)
+
+
+    def test_08_pushover_notification(self):
+        # 1. Test Warden authorization
+        ok, msg, params = inspect_and_authorize("send_pushover_alert", {"message": "Test Alert", "title": "Unit Test"})
+        self.assertTrue(ok)
+        self.assertIn("authorized", msg.lower())
+        
+        ok, msg, params = inspect_and_authorize("send_pushover_alert", {})
+        self.assertFalse(ok)
+        self.assertIn("missing", msg.lower())
+        
+        # 2. Test Engine simulation execution
+        from engine import execute_tool_call
+        res = execute_tool_call({
+            "id": "act_1",
+            "tool": "send_pushover_alert",
+            "params": {"message": "Task complete!", "title": "Thersites Alert"}
+        })
+        self.assertEqual(res["status"], "success")
+        self.assertTrue("Successfully dispatched" in res["result"] or "[SIMULATION]" in res["result"])
 
 
 if __name__ == "__main__":
