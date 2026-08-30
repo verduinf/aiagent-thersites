@@ -1,7 +1,7 @@
 """
 Tado Climate API Client for Local Intern Thersites
-Handles OAuth2 PKCE token exchange with in-memory caching (10-min lifecycle),
-home discovery, and room temperature/humidity extraction.
+Handles OAuth2 PKCE token exchange with active access probing, 
+in-memory caching (10-min lifecycle), home discovery, and room telemetry extraction.
 """
 import os
 import re
@@ -26,7 +26,6 @@ def load_credentials():
     password = os.environ.get("TADO_PASSWORD", "")
     
     if not username or not password:
-        # Check .env directly if not in os.environ
         try:
             with open(".env", "r", encoding="utf-8-sig") as f:
                 for line in f:
@@ -52,23 +51,51 @@ def set_tado_credentials(username: str, password: str):
     _CACHED_ACCESS_TOKEN = None
     _TOKEN_EXPIRES_AT = 0.0
 
-def get_valid_access_token() -> str:
+def is_cached_token_alive() -> bool:
     """
-    Exchanges Tado credentials for an OAuth2 Bearer token via PKCE.
-    Reuses cached token if valid (Tado tokens expire in 10 minutes / 600s).
+    Probes the Tado API with the current cached token to verify if we still have access.
+    Returns True if the token is valid and active (HTTP 200), avoiding unnecessary re-auth.
     """
     global _CACHED_ACCESS_TOKEN, _TOKEN_EXPIRES_AT
+    if not _CACHED_ACCESS_TOKEN:
+        return False
+        
     now = time.time()
+    # If locally expired beyond lifecycle timestamp, do not probe
+    if now >= (_TOKEN_EXPIRES_AT - 15):
+        return False
+        
+    try:
+        headers = {
+            "Authorization": f"Bearer {_CACHED_ACCESS_TOKEN}",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AI-Agent-Thersites"
+        }
+        probe_r = requests.get("https://my.tado.com/api/v2/me", headers=headers, timeout=5)
+        if probe_r.status_code == 200:
+            return True
+    except Exception:
+        pass
+        
+    return False
+
+def get_valid_access_token() -> str:
+    """
+    Returns a verified valid OAuth2 Bearer token.
+    Prior to requesting a new token via OAuth, checks if existing cached access is still alive.
+    """
+    global _CACHED_ACCESS_TOKEN, _TOKEN_EXPIRES_AT
     
-    # Return cached token if valid for at least 60 more seconds (prevents mid-request expiry)
-    if _CACHED_ACCESS_TOKEN and now < (_TOKEN_EXPIRES_AT - 60):
+    # 1. Check prior access before initiating an OAuth request
+    if is_cached_token_alive():
         return _CACHED_ACCESS_TOKEN
         
     username, password = load_credentials()
     if not username or not password:
         raise ValueError("Tado credentials not found. Please configure TADO_USERNAME and TADO_PASSWORD in .env")
         
-    # 1. Generate PKCE Verifier & Challenge
+    now = time.time()
+    
+    # 2. Perform PKCE Authorization Exchange
     code_verifier = base64.urlsafe_b64encode(secrets.token_bytes(32)).rstrip(b'=').decode('utf-8')
     challenge_bytes = hashlib.sha256(code_verifier.encode('utf-8')).digest()
     code_challenge = base64.urlsafe_b64encode(challenge_bytes).rstrip(b'=').decode('utf-8')
@@ -119,7 +146,7 @@ def get_valid_access_token() -> str:
         
     auth_code = code_match.group(1)
     
-    # 2. Exchange Authorization Code for Bearer Access Token
+    # 3. Exchange Code for Bearer Access Token
     token_payload = {
         "client_id": client_id,
         "grant_type": "authorization_code",
@@ -140,7 +167,7 @@ def get_valid_access_token() -> str:
 def get_home_info() -> Dict[str, Any]:
     """Fetches and caches the user's primary Home ID and Name."""
     global _CACHED_HOME_ID, _CACHED_HOME_NAME
-    if _CACHED_HOME_ID is not None:
+    if _CACHED_HOME_ID is not None and is_cached_token_alive():
         return {"id": _CACHED_HOME_ID, "name": _CACHED_HOME_NAME}
         
     token = get_valid_access_token()
@@ -245,7 +272,7 @@ def get_room_temperatures() -> Dict[str, Any]:
             hum_str = f"{humidity:.0f}%" if humidity is not None else "N/A"
             heat_str = f"{heating_power:.0f}%" if heating_power is not None else "0%"
             
-            summary_lines.append(f"- {room_name}: Current: {curr_str} | Target: {targ_str} | Humidity: {hum_str} | Heating: {heat_str}")
+            summary_lines.append(f"- {room_name}: Current: {curr_str} (Target: {targ_str}, Humidity: {hum_str}, Heating: {heat_str})")
             
         return {
             "status": "success",
