@@ -253,13 +253,19 @@ def dispatch_pushover_notification(message: str, title: str = "Thersites Agent",
     files = None
     file_handle = None
     if image_path:
-        resolved_img = Path(image_path)
-        if not resolved_img.is_absolute():
+        p = Path(image_path)
+        if p.exists() and p.is_file():
+            resolved_img = p
+        elif (SANDBOX_DIR / p.name).exists() and (SANDBOX_DIR / p.name).is_file():
+            resolved_img = SANDBOX_DIR / p.name
+        elif (SANDBOX_DIR / image_path).exists() and (SANDBOX_DIR / image_path).is_file():
             resolved_img = SANDBOX_DIR / image_path
+        else:
+            resolved_img = None
             
-        if resolved_img.exists() and resolved_img.is_file():
+        if resolved_img and resolved_img.exists() and resolved_img.is_file():
             file_handle = open(resolved_img, "rb")
-            files = {"attachment": (resolved_img.name, file_handle)}
+            files = {"attachment": (resolved_img.name, file_handle, "image/png")}
         else:
             log_subagent("Pushover", f"Image file '{image_path}' not found on disk. Sending text alert.", INDICATOR_THINKING)
             
