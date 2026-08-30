@@ -215,7 +215,9 @@ def query_ollama(messages: List[Dict[str, str]], model: str = MODEL_NAME, think_
     headers = {"Content-Type": "application/json"}
     
     total_chars = sum(len(m.get("content", "")) for m in messages)
-    dynamic_num_ctx = 4096 if total_chars > 3000 else 2048
+    # Ensure num_ctx has at least 2048 tokens of headroom above prompt size
+    estimated_prompt_tokens = int(total_chars / 3.2) + 500
+    dynamic_num_ctx = max(NUM_CTX, estimated_prompt_tokens + 2048, 8192)
     
     payload = {
         "model": model,
@@ -225,6 +227,7 @@ def query_ollama(messages: List[Dict[str, str]], model: str = MODEL_NAME, think_
         "think": think_mode,
         "options": {
             "num_ctx": dynamic_num_ctx,
+            "num_predict": 1024,
             "num_thread": 8,
             "temperature": AI_TEMPERATURE
         },
