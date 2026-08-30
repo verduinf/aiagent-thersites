@@ -1,1 +1,3 @@
-Step Plan: 1) Fetch NU.nl headlines (web_fetch), 2) Write newbrief.txt (write_to_file), 3) Confirm file in sandbox
+Movie Recommendation Task - Step 1 of 1:
+1. Provide movie recommendation based on general knowledge
+2. Ask about user preferences for follow-up

@@ -145,6 +145,7 @@ def prewarm_ollama_model() -> bool:
         "model": MODEL_NAME,
         "messages": [],
         "keep_alive": KEEP_AI_ALIVE,
+        "think": False,
         "options": {
             "num_ctx": 4096,
             "num_thread": 8
@@ -175,6 +176,7 @@ def query_ollama(messages: List[Dict[str, str]], model: str = MODEL_NAME) -> Tup
         "model": model,
         "messages": messages,
         "keep_alive": KEEP_AI_ALIVE,
+        "think": False,
         "options": {
             "num_ctx": dynamic_num_ctx,
             "num_thread": 8,
