@@ -40,20 +40,19 @@ Always output RAW JSON matching this exact structure:
 }}
 
 Available Tools (Restricted strictly to C:/Dev/aiagent-thersites/sandbox):
-- `web_fetch`: {{"url": "https://nu.nl"}} (Fetches any whitelisted nu.nl page or article URL)
-- `write_to_file`: {{"filepath": "C:/Dev/aiagent-thersites/sandbox/file.txt", "content": "..."}}
+- `web_fetch`: {{"url": "https://nu.nl/tech"}} (Fetches web pages. Target category URLs like https://nu.nl/tech for topic news.)
+- `write_to_file`: {{"filepath": "C:/Dev/aiagent-thersites/sandbox/file.txt", "content": "..."}} (Always write newly fetched content. Overwrite target file fully.)
 - `read_file`: {{"filepath": "C:/Dev/aiagent-thersites/sandbox/file.txt"}}
 - `delete_file`: {{"filepath": "C:/Dev/aiagent-thersites/sandbox/file.txt"}}
 - `list_sandbox`: {{"dirpath": "C:/Dev/aiagent-thersites/sandbox"}}
 - `write_to_scratchpad`: {{"content": "..."}}
-- `sqlite_query_executor`: {{"query": "SELECT * FROM thersites_scratchpad;"}} (Full CRUD on thersites_scratchpad only)
+- `sqlite_query_executor`: {{"query": "SELECT * FROM thersites_scratchpad;"}}
 - `none` or empty actions []: Signal work completion.
 
 Plan-First Multi-Turn Workflow:
-1. For multi-step tasks (or when asked to check pinned instructions), use `write_to_scratchpad` on Turn 1 to outline your Step Plan (you have up to {MAX_INNER_LOOP_TURNS} turns, so keep your plan to 5-6 steps max).
-2. Execute one tool step per turn so you can inspect tool results before taking the next action.
-3. Signal completion of all steps by outputting empty "actions": [] when all steps are executed successfully.
-4. If the prompt asks to check pinned instructions, inspect PINNED CONTEXT ANCHORS for active directives and execute them.
+1. Outline plan on Turn 1 if multi-step.
+2. Execute one tool step per turn.
+3. Signal completion with empty actions [].
 """
 
 def extract_fuzzy_json(raw_text: str) -> Dict[str, Any]:
@@ -145,7 +144,7 @@ def prewarm_ollama_model() -> bool:
         "model": MODEL_NAME,
         "messages": [],
         "keep_alive": KEEP_AI_ALIVE,
-        "think": False,
+        "think": think_mode,
         "options": {
             "num_ctx": 4096,
             "num_thread": 8
@@ -164,7 +163,7 @@ def prewarm_ollama_model() -> bool:
         log_main(f"Model pre-warm warning: {e}", INDICATOR_BLOCKED)
     return False
 
-def query_ollama(messages: List[Dict[str, str]], model: str = MODEL_NAME) -> Tuple[str, Dict[str, Any]]:
+def query_ollama(messages: List[Dict[str, str]], model: str = MODEL_NAME, think_mode: bool = False) -> Tuple[str, Dict[str, Any]]:
     base = OLLAMA_BASE_URL.rstrip('/')
     native_url = f"{base}/api/chat"
     headers = {"Content-Type": "application/json"}
@@ -176,7 +175,7 @@ def query_ollama(messages: List[Dict[str, str]], model: str = MODEL_NAME) -> Tup
         "model": model,
         "messages": messages,
         "keep_alive": KEEP_AI_ALIVE,
-        "think": False,
+        "think": think_mode,
         "options": {
             "num_ctx": dynamic_num_ctx,
             "num_thread": 8,
@@ -291,7 +290,7 @@ def execute_tool_call(action: Dict[str, Any]) -> Dict[str, Any]:
     except Exception as e:
         return {"id": action_id, "tool": tool_name, "status": "error", "result": f"Execution error: {str(e)}"}
 
-def run_agent_inner_loop(session_id: str, user_prompt: str) -> Generator[Dict[str, Any], None, str]:
+def run_agent_inner_loop(session_id: str, user_prompt: str, think_mode: bool = False) -> Generator[Dict[str, Any], None, str]:
     log_main(f"Starting Inner Loop for session '{session_id}' prompt: '{user_prompt[:50]}...'", INDICATOR_THINKING)
     add_message(session_id, "user", user_prompt)
     
