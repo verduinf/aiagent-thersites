@@ -10,11 +10,21 @@ from typing import List, Dict, Any, Optional
 from pathlib import Path
 from config import DB_PATH
 
+from contextlib import contextmanager
+
+@contextmanager
 def get_db_connection():
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    return conn
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 def init_db():
     with get_db_connection() as conn:
@@ -257,3 +267,34 @@ def delete_message(message_id: int) -> bool:
         cursor = conn.execute("DELETE FROM messages WHERE id = ?", (message_id,))
         conn.commit()
         return cursor.rowcount > 0
+
+def save_clue(key: str, value: str) -> Dict[str, Any]:
+    """Saves or updates a persistent memory clue in thersites_scratchpad."""
+    clean_key = str(key).strip().lower().replace(" ", "_")
+    clean_val = str(value).strip()
+    now = time.strftime("%Y-%m-%d %H:%M:%S")
+    with get_db_connection() as conn:
+        conn.execute("""
+            INSERT INTO thersites_scratchpad (key, value, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+        """, (clean_key, clean_val, now))
+    return {"key": clean_key, "value": clean_val, "updated_at": now}
+
+def delete_clue(key: str) -> bool:
+    """Deletes a memory clue from thersites_scratchpad."""
+    clean_key = str(key).strip().lower().replace(" ", "_")
+    with get_db_connection() as conn:
+        cursor = conn.execute("""
+            DELETE FROM thersites_scratchpad WHERE key = ?
+        """, (clean_key,))
+        return cursor.rowcount > 0
+
+def get_all_clues(limit: int = 10) -> List[Dict[str, Any]]:
+    """Retrieves up to `limit` active memory clues from thersites_scratchpad."""
+    with get_db_connection() as conn:
+        rows = conn.execute("""
+            SELECT key, value, updated_at FROM thersites_scratchpad
+            ORDER BY updated_at DESC LIMIT ?
+        """, (limit,)).fetchall()
+        return [{"key": r["key"], "value": r["value"], "updated_at": r["updated_at"]} for r in rows]

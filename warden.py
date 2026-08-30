@@ -11,22 +11,52 @@ from typing import Tuple, Dict, Any, List, Optional
 
 def enforce_single_action_rule(actions: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], Optional[str]]:
     """
-    Enforces the Single-Action Invariant per turn.
-    If multiple actions are emitted, truncates execution strictly to the first actionable tool call
-    and defers the rest to subsequent turns to prevent multi-step hallucinations.
+    Enforces the Single-Action Invariant per turn with Internal Memory Co-Action Exemption:
+    - At most ONE external I/O action (web_fetch, download_image, get_room_temperatures, send_message, etc.)
+    - At most ONE internal memory action (remember, unremember)
+    Allows Thersites to record persistent notes/clues alongside an external tool execution or conclusion.
     """
     if not actions or len(actions) <= 1:
         return actions, None
         
-    first_action = actions[0]
-    deferred_count = len(actions) - 1
-    deferred_tools = [a.get("tool", a.get("name", "tool")) for a in actions[1:]]
+    MEMORY_TOOLS = {"remember", "unremember"}
+    PASSIVE_TOOLS = {"none", "finish", ""}
     
-    warden_notice = (
-        f"[WARDEN ENFORCEMENT]: Single-Action Rule Active. Executing strictly 1st action ('{first_action.get('tool')}'). "
-        f"Deferred {deferred_count} bundled action(s) ({', '.join(deferred_tools)}) to the next turn to ensure step-by-step observation."
-    )
-    return [first_action], warden_notice
+    external_actions = []
+    memory_actions = []
+    deferred_actions = []
+    
+    for a in actions:
+        tool = a.get("tool", a.get("name", "")).strip().lower()
+        if tool in MEMORY_TOOLS:
+            if not memory_actions:
+                memory_actions.append(a)
+            else:
+                deferred_actions.append(tool)
+        elif tool not in PASSIVE_TOOLS:
+            if not external_actions:
+                external_actions.append(a)
+            else:
+                deferred_actions.append(tool)
+                
+    # Reassemble preserving original relative order
+    filtered_actions = []
+    for a in actions:
+        if a in external_actions or a in memory_actions:
+            if a not in filtered_actions:
+                filtered_actions.append(a)
+                
+    if not filtered_actions:
+        filtered_actions = [actions[0]]
+        
+    if deferred_actions:
+        warden_notice = (
+            f"[WARDEN ENFORCEMENT]: Single-Action Rule Active. Executing allowed action bundle ({', '.join(a.get('tool') for a in filtered_actions)}). "
+            f"Deferred {len(deferred_actions)} bundled action(s) ({', '.join(deferred_actions)}) to subsequent turns."
+        )
+        return filtered_actions, warden_notice
+        
+    return filtered_actions, None
 
 class WardenViolation(Exception):
     """Raised when a tool action violates safety or sandbox boundaries."""
@@ -122,6 +152,19 @@ def inspect_and_authorize(tool_name: str, params: Dict[str, Any]) -> Tuple[bool,
             return False, "Missing required 'message' parameter.", params
         return True, "Pushover notification authorized by The Warden.", params
         
+    elif tool_name == "remember":
+        key = params.get("key", "")
+        clue = params.get("clue", params.get("value", ""))
+        if not key or not clue:
+            return False, "Missing required 'key' or 'clue' parameter for remember tool.", params
+        return True, f"Memory clue '{key}' authorized.", params
+
+    elif tool_name == "unremember":
+        key = params.get("key", "")
+        if not key:
+            return False, "Missing required 'key' parameter for unremember tool.", params
+        return True, f"Memory clue unremember '{key}' authorized.", params
+
     elif tool_name in ("write_to_scratchpad", "none", "finish", ""):
         return True, "Authorized action.", params
         

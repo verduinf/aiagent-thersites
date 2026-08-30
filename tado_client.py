@@ -1,3 +1,4 @@
+import threading
 """
 Tado Climate API Client for Local Intern Thersites
 Handles OAuth2 PKCE token exchange with active access probing, 
@@ -19,6 +20,7 @@ _CACHED_HOME_ID: Optional[int] = None
 _CACHED_HOME_NAME: str = "Home"
 _CACHED_ZONES_MAP: Dict[int, Dict[str, Any]] = {}
 _ZONES_MAP_EXPIRES_AT: float = 0.0
+_TOKEN_LOCK = threading.Lock()
 
 def load_credentials():
     """Loads Tado credentials from environment or .env file."""
@@ -80,14 +82,19 @@ def is_cached_token_alive() -> bool:
 
 def get_valid_access_token() -> str:
     """
-    Returns a verified valid OAuth2 Bearer token.
+    Returns a verified valid OAuth2 Bearer token with thread-safe concurrency locking.
     Prior to requesting a new token via OAuth, checks if existing cached access is still alive.
     """
     global _CACHED_ACCESS_TOKEN, _TOKEN_EXPIRES_AT
     
-    # 1. Check prior access before initiating an OAuth request
+    # 1. Fast path: check prior access before acquiring lock
     if is_cached_token_alive():
         return _CACHED_ACCESS_TOKEN
+        
+    with _TOKEN_LOCK:
+        # Re-check under lock in case another thread refreshed it
+        if is_cached_token_alive():
+            return _CACHED_ACCESS_TOKEN
         
     username, password = load_credentials()
     if not username or not password:

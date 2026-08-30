@@ -214,5 +214,43 @@ class TestThersitesSuite(unittest.TestCase):
         self.assertIsNone(notice_single)
 
 
+
+    def test_11_paycheck_memory_capsule_and_co_action(self):
+        import database
+        from warden import enforce_single_action_rule, inspect_and_authorize
+        from engine import execute_tool_call
+        
+        # 1. Test database save_clue, get_all_clues, delete_clue
+        database.save_clue("test_coffee", "espresso with cream")
+        clues = database.get_all_clues()
+        self.assertTrue(any(c["key"] == "test_coffee" and c["value"] == "espresso with cream" for c in clues))
+        
+        # 2. Test Warden authorization for remember and unremember
+        ok, msg, _ = inspect_and_authorize("remember", {"key": "test_pref", "clue": "high priority"})
+        self.assertTrue(ok)
+        
+        ok_del, msg_del, _ = inspect_and_authorize("unremember", {"key": "test_pref"})
+        self.assertTrue(ok_del)
+        
+        # 3. Test Memory Co-Action Rule (1 external tool + 1 internal memory action passes without deferral)
+        co_actions = [
+            {"id": "act_1", "tool": "get_room_temperatures", "params": {}},
+            {"id": "act_2", "tool": "remember", "params": {"key": "study_temp", "clue": "21.5C"}}
+        ]
+        filtered, notice = enforce_single_action_rule(co_actions)
+        self.assertEqual(len(filtered), 2)
+        self.assertIsNone(notice)  # Zero warning/deferral for memory co-action!
+        
+        # 4. Test engine execution
+        res = execute_tool_call({"id": "act_mem", "tool": "remember", "params": {"key": "study_note", "clue": "turn off heater at night"}})
+        self.assertEqual(res["status"], "success")
+        self.assertIn("Clue saved", res["result"])
+        
+        # Cleanup
+        database.delete_clue("test_coffee")
+        database.delete_clue("study_temp")
+        database.delete_clue("study_note")
+
+
 if __name__ == '__main__':
     unittest.main()

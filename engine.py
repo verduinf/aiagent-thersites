@@ -46,7 +46,9 @@ Always package your thoughts, replies, and actions in this JSON structure for EV
 }}
 
 Available Tools & Capabilities:
-- `get_room_temperatures`: {{}} (CLIMATE & THERMOSTATS: When The Boss asks about room temperatures, home heating, or thermostats, use this tool! It fetches live temperatures and humidity for all rooms from The Boss's Tado climate control system.)
+- `remember`: {{"key": "study_pref_temp", "clue": "Study preferred temp is 21.5?C"}} (PERSISTENT PAYCHECK MEMORY: When The Boss tells you to remember, save, or note a fact, habit, or preference, you MUST call this tool! It writes a permanent clue into your SQLite Paycheck Capsule for all future sessions.)
+- `unremember`: {{"key": "study_pref_temp"}} (Deletes an outdated clue from your Paycheck Capsule.)
+- `get_room_temperatures`: {{}} (CLIMATE & THERMOSTATS: Fetches live inside temperatures, target settings, and humidity for all rooms from The Boss's Tado system. When reporting back to The Boss, ALWAYS use the EXACT numbers and room names returned by this tool!)
 - `web_fetch`: {{"url": "https://www.duic.nl/rss/"}} (Fetches whitelisted news feeds. Use "https://www.duic.nl/rss/" for DUIC Utrecht news; use "https://www.nu.nl/rss/Algemeen", "https://www.nu.nl/rss/Tech", or "https://www.nu.nl/rss/weerbericht" for NU.nl.)
 - `download_image`: {{"url": "https://images.nu.nl/...", "filepath": "C:/Dev/aiagent-thersites/sandbox/photo.jpg"}} (Downloads binary web image URLs to sandbox.)
 - `send_message`: {{"message": "...", "title": "Thersites Alert", "image_path": "sandbox/photo.jpg"}} (Sends a real-time push alert with optional photo to The Boss's mobile device via Pushover.)
@@ -56,14 +58,31 @@ Available Tools & Capabilities:
 - `list_sandbox`: {{"dirpath": "C:/Dev/aiagent-thersites/sandbox"}}
 - `sql_query`: {{"query": "SELECT ..."}}
 
-Execution Invariants & Deliberate Reasoning (Enforced by The Warden):
-1. DELIBERATE BEFORE ANSWERING: Always write 1-2 thoughtful sentences in "thought" analyzing The Boss's request and determining whether tools are required before formulating "content" or "actions".
-2. SINGLE ACTION PER TURN: Emit strictly ONE tool action in "actions": [{{"id": "act_1", "tool": "...", "params": {{}}}}].
-3. COMPLETION: When finished, set "actions": [] inside valid JSON to complete the task.
+Execution Invariants & Paycheck Memory (Enforced by The Warden):
+1. MANDATORY REMEMBER TOOL: When The Boss says 'remember that ...' or gives you a fact to remember, you MUST execute the `remember` tool. Replying with actions: [] will NOT save it to SQLite!
+2. SINGLE ACTION & MEMORY CO-ACTION: Emit at most ONE external I/O action plus optionally ONE internal memory action (remember, unremember) per turn.
+3. PAYCHECK CAPSULE AWARENESS: Inspect the '--- ?? PAYCHECK CAPSULE ---' section in your prompt for permanent clues left by your past self.
+4. DELIBERATE BEFORE ANSWERING: Always write 1-2 thoughtful sentences in "thought" before formulating "content" or "actions".
+5. COMPLETION: Set "actions": [] inside valid JSON to complete the task.
 
 Few-Shot Examples:
 
-Example 1 ? Climate & Thermostat Query:
+Example 1 ? Remembering a Fact for the Future:
+User: "Remember that my favorite study temperature is 21.5?C"
+Assistant:
+{{
+  "thought": "The Boss is instructing me to remember a preference. I MUST call the remember tool to save this clue in SQLite for future sessions.",
+  "content": "Locked in, Boss! I've saved that clue to my Paycheck Capsule for my future self.",
+  "actions": [
+    {{
+      "id": "act_1",
+      "tool": "remember",
+      "params": {{"key": "study_pref_temp", "clue": "Study preferred temperature is 21.5?C"}}
+    }}
+  ]
+}}
+
+Example 2 ? Climate & Thermostat Query:
 User: "What are the temperatures in my rooms right now?"
 Assistant:
 {{
@@ -78,7 +97,7 @@ Assistant:
   ]
 }}
 
-Example 2 ? Conversational Chat / Praise:
+Example 3 ? Conversational Chat / Praise:
 User: "Great job Thersites!"
 Assistant:
 {{
@@ -439,6 +458,22 @@ def execute_tool_call(action: Dict[str, Any]) -> Dict[str, Any]:
                 f.write(content)
             return {"id": action_id, "tool": tool_name, "status": "success", "result": f"Scratchpad updated at '{SCRATCHPAD_PATH.name}'"}
             
+        elif tool_name == "remember":
+            key = sanitized_params.get("key", "")
+            clue = sanitized_params.get("clue", sanitized_params.get("value", ""))
+            from database import save_clue
+            res = save_clue(key, clue)
+            log_subagent("Memory Capsule", f"Saved clue '{res['key']}': '{res['value']}'", INDICATOR_DONE)
+            return {"id": action_id, "tool": tool_name, "status": "success", "result": f"Clue saved to Paycheck Capsule: [{res['key']}] -> {res['value']}"}
+
+        elif tool_name == "unremember":
+            key = sanitized_params.get("key", "")
+            from database import delete_clue
+            deleted = delete_clue(key)
+            status_msg = f"Clue '{key}' deleted from Paycheck Capsule" if deleted else f"Clue '{key}' not found in Paycheck Capsule"
+            log_subagent("Memory Capsule", status_msg, INDICATOR_DONE)
+            return {"id": action_id, "tool": tool_name, "status": "success", "result": status_msg}
+
         elif tool_name == "sqlite_query_executor":
             query = sanitized_params["query"]
             sql_results = execute_user_sql_query(query)
@@ -482,7 +517,16 @@ def run_agent_inner_loop(session_id: str, user_prompt: str, think_mode: bool = F
         telemetry_tag = f"[TELEMETRY: Turn {turn} of {MAX_INNER_LOOP_TURNS} | Rolling Buffer: {rolling_char_count:,} / {ROLLING_BUFFER_CHAR_LIMIT:,} chars]"
         log_telemetry(turn, MAX_INNER_LOOP_TURNS, rolling_char_count, ROLLING_BUFFER_CHAR_LIMIT)
         
+        from database import get_all_clues
+        clues = get_all_clues(limit=10)
+        clues_text = ""
+        if clues:
+            clues_text = "\n".join([f"- [{c['key']}]: {c['value']}" for c in clues])
+
         sys_content = f"{SYSTEM_CONTRACT}\n\n{telemetry_tag}"
+        if clues_text:
+            sys_content += f"\n\n--- ?? PAYCHECK CAPSULE (Clues from your Past Self) ---\n{clues_text}\n(These are persistent notes your past self saved into SQLite. You ALREADY HAVE these clues in front of you?no need to query SQLite!)"
+            
         if pinned_text:
             sys_content += f"\n\n--- ?? PINNED CONTEXT ANCHORS (Active UI Pins from The Boss) ---\n{pinned_text}\n(These are the exact messages The Boss pinned in the UI for your reference.)"
             
