@@ -1,4 +1,4 @@
-﻿# SQLite Database
+# SQLite Database
 data/*.db
 data/
 
@@ -16,3 +16,7 @@ venv/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Sandbox Generated Files
+sandbox/*
+!sandbox/.gitkeep
