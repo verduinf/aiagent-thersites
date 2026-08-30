@@ -38,7 +38,7 @@ body {
 .app-header {
     background-color: var(--panel-bg);
     border-bottom: 1px solid var(--border-color);
-    padding: 0.75rem 1.5rem;
+    padding: 0.65rem 1.25rem;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -48,27 +48,40 @@ body {
         align-items: center;
         gap: 0.75rem;
 
-        .logo-icon {
-            font-size: 1.5rem;
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: 0.8rem;
+            color: #4ade80;
+            background-color: rgba(74, 222, 128, 0.1);
+            padding: 0.3rem 0.75rem;
+            border-radius: 20px;
+            border: 1px solid rgba(74, 222, 128, 0.3);
+
+            .status-dot {
+                width: 8px;
+                height: 8px;
+                background-color: #4ade80;
+                border-radius: 50%;
+            }
         }
 
-        .header-titles {
-            h1 {
-                font-size: 1.1rem;
-                font-weight: 700;
-                color: #f0f6fc;
-            }
-            .sub-title {
-                font-size: 0.75rem;
-                color: var(--text-muted);
-            }
+        .perf-tag, .rolling-badge {
+            font-family: var(--font-code);
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            background-color: var(--bg-dark);
+            padding: 0.3rem 0.75rem;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
         }
     }
 
-    .header-center {
+    .header-right {
         display: flex;
         align-items: center;
-        gap: 0.5rem;
+        gap: 0.6rem;
 
         .session-dropdown {
             background-color: var(--bg-dark);
@@ -82,41 +95,6 @@ body {
             &:focus {
                 border-color: var(--accent-cyan);
             }
-        }
-    }
-
-    .header-right {
-        display: flex;
-        align-items: center;
-        gap: 0.85rem;
-
-        .status-indicator {
-            display: flex;
-            align-items: center;
-            gap: 0.4rem;
-            font-size: 0.8rem;
-            color: #4ade80;
-            background-color: rgba(74, 222, 128, 0.1);
-            padding: 0.25rem 0.6rem;
-            border-radius: 20px;
-            border: 1px solid rgba(74, 222, 128, 0.3);
-
-            .status-dot {
-                width: 7px;
-                height: 7px;
-                background-color: #4ade80;
-                border-radius: 50%;
-            }
-        }
-
-        .perf-tag, .rolling-badge {
-            font-family: var(--font-code);
-            font-size: 0.75rem;
-            color: var(--text-muted);
-            background-color: var(--bg-dark);
-            padding: 0.25rem 0.6rem;
-            border-radius: 6px;
-            border: 1px solid var(--border-color);
         }
     }
 }
