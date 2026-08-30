@@ -336,11 +336,11 @@ def execute_tool_call(action: Dict[str, Any]) -> Dict[str, Any]:
                 url = "https://www.nu.nl/rss/Tech"
             elif normalized_url in ("https://www.nu.nl/algemeen", "https://nu.nl/algemeen", "https://www.nu.nl", "https://nu.nl"):
                 url = "https://www.nu.nl/rss/Algemeen"
-            elif normalized_url in ("https://www.nrc.nl", "https://nrc.nl"):
-                url = "https://www.nrc.nl/rss/"
+            elif normalized_url in ("https://www.duic.nl", "https://duic.nl", "https://www.duic.nl/feed", "https://duic.nl/feed"):
+                url = "https://www.duic.nl/rss/"
                 
             log_subagent("Web Fetcher", f"Fetching '{url}'...", INDICATOR_THINKING)
-            resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"}, timeout=15)
+            resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AI-Agent-Thersites"}, timeout=15)
             raw_html = resp.text
             clean_text = clean_html_to_text(raw_html, max_chars=4000)
             log_subagent("Web Fetcher", f"Extracted {len(clean_text)} chars of text with article URLs in 0.01s", INDICATOR_DONE)
