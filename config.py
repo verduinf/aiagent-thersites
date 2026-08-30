@@ -45,12 +45,15 @@ URL_DOMAIN_WHITELIST = config_data.get("URL_DOMAIN_WHITELIST", ["nu.nl"])
 PUSHOVER_USER_KEY = os.environ.get("PUSHOVER_USER_KEY", config_data.get("PUSHOVER_USER_KEY", ""))
 PUSHOVER_API_TOKEN = os.environ.get("PUSHOVER_API_TOKEN", os.environ.get("PUSHOVER_API", config_data.get("PUSHOVER_API_TOKEN", "")))
 PUSHOVER_EMAIL = os.environ.get("PUSHOVER_EMAIL", config_data.get("PUSHOVER_EMAIL", ""))
+VISION_MODEL_NAME = os.environ.get("VISION_MODEL_NAME", config_data.get("VISION_MODEL_NAME", "qwen2.5vl:7b"))
+VISION_NUM_CTX = int(os.environ.get("VISION_NUM_CTX", config_data.get("VISION_NUM_CTX", 2048)))
 
 
 VERBOSE = "--verbose" in sys.argv or os.environ.get("VERBOSE") == "1" or config_data.get("VERBOSE", False)
 
 DB_PATH = BASE_DIR / "data" / "thersites.db"
 SANDBOX_DIR = BASE_DIR / "sandbox"
+UPLOADS_DIR = SANDBOX_DIR / "uploads"
 SCRATCHPAD_PATH = BASE_DIR / "scratchpad.md"
 STATIC_DIR = BASE_DIR / "static"
 TESTS_DIR = BASE_DIR / "tests"
@@ -59,4 +62,5 @@ SCRIPTS_DIR = BASE_DIR / "scripts"
 DATA_DIR = BASE_DIR / "data"
 
 os.makedirs(SANDBOX_DIR, exist_ok=True)
+os.makedirs(UPLOADS_DIR, exist_ok=True)
 os.makedirs(DATA_DIR, exist_ok=True)

@@ -12,8 +12,12 @@ document.addEventListener("DOMContentLoaded", () => {
     const chatForm = document.getElementById("chatForm");
     const promptInput = document.getElementById("promptInput");
     const sendBtn = document.getElementById("sendBtn");
+    const attachBtn = document.getElementById("attachBtn");
+    const imageInput = document.getElementById("imageInput");
+    const imagePreviewTray = document.getElementById("imagePreviewTray");
 
     let currentSessionId = null;
+    let attachedImage = null;
 
     async function initApp() {
         await loadSessions();
@@ -239,6 +243,59 @@ document.addEventListener("DOMContentLoaded", () => {
         pinnedBadge.textContent = "Pinned: 0 / 5k";
     }
 
+    
+    if (attachBtn && imageInput) {
+        attachBtn.addEventListener("click", () => imageInput.click());
+
+        imageInput.addEventListener("change", async () => {
+            if (!imageInput.files || imageInput.files.length === 0) return;
+            const file = imageInput.files[0];
+            const formData = new FormData();
+            formData.append("file", file);
+
+            try {
+                attachBtn.disabled = true;
+                attachBtn.textContent = "Uploading...";
+                const res = await fetch("/api/upload", { method: "POST", body: formData });
+                const data = await res.json();
+                if (data.status === "success") {
+                    attachedImage = data;
+                    renderImagePreview();
+                } else {
+                    alert("Upload failed: " + (data.detail || "Unknown error"));
+                }
+            } catch (err) {
+                console.error("Error uploading image:", err);
+                alert("Failed to upload image.");
+            } finally {
+                attachBtn.disabled = false;
+                attachBtn.innerHTML = "&#128065;&#65039; Attach";
+                imageInput.value = "";
+            }
+        });
+    }
+
+    function renderImagePreview() {
+        if (!imagePreviewTray) return;
+        if (!attachedImage) {
+            imagePreviewTray.style.display = "none";
+            imagePreviewTray.innerHTML = "";
+            return;
+        }
+        imagePreviewTray.style.display = "flex";
+        imagePreviewTray.innerHTML = `
+            <div class="image-preview-card">
+                <img src="${attachedImage.url}" class="image-preview-thumb" alt="Preview">
+                <span class="image-preview-name">${escapeHtml(attachedImage.filename)}</span>
+                <button type="button" class="image-remove-btn" title="Remove attachment">&times;</button>
+            </div>
+        `;
+        imagePreviewTray.querySelector(".image-remove-btn").addEventListener("click", () => {
+            attachedImage = null;
+            renderImagePreview();
+        });
+    }
+
     chatForm.addEventListener("submit", async (e) => {
         e.preventDefault();
         let prompt = promptInput.value.trim();
@@ -257,7 +314,14 @@ document.addEventListener("DOMContentLoaded", () => {
         let lastTurn = 1;
 
         try {
-            const eventSource = new EventSource(`/api/chat/stream?session_id=${currentSessionId}&prompt=${encodeURIComponent(prompt)}`);
+            let streamUrl = `/api/chat/stream?session_id=${currentSessionId}&prompt=${encodeURIComponent(prompt)}`;
+        if (attachedImage) {
+            streamUrl += `&image_path=${encodeURIComponent(attachedImage.filepath)}`;
+        }
+        attachedImage = null;
+        renderImagePreview();
+
+        const eventSource = new EventSource(streamUrl);
 
             eventSource.onmessage = (event) => {
                 const data = JSON.parse(event.data);

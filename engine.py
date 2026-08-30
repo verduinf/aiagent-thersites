@@ -7,14 +7,17 @@ import re
 import json
 import time
 import requests
+_OLLAMA_SESSION = requests.Session()
 from pathlib import Path
 from typing import Dict, Any, List, Generator, Tuple
 import urllib.parse
 import urllib.request
+import base64
+from typing import Optional
 from config import (
-    OLLAMA_BASE_URL, MODEL_NAME, KEEP_AI_ALIVE, NUM_CTX,
+    OLLAMA_BASE_URL, MODEL_NAME, VISION_MODEL_NAME, VISION_NUM_CTX, KEEP_AI_ALIVE, NUM_CTX,
     ROLLING_BUFFER_CHAR_LIMIT, PINNED_CONTEXT_CHAR_LIMIT,
-    MAX_INNER_LOOP_TURNS, AI_TEMPERATURE, SCRATCHPAD_PATH, SANDBOX_DIR, VERBOSE,
+    MAX_INNER_LOOP_TURNS, AI_TEMPERATURE, SCRATCHPAD_PATH, SANDBOX_DIR, UPLOADS_DIR, VERBOSE,
     PUSHOVER_USER_KEY, PUSHOVER_API_TOKEN
 )
 from database import (
@@ -50,6 +53,7 @@ Available Tools & Capabilities:
 - `unremember`: {{"key": "study_pref_temp"}} (Deletes an outdated clue from your Paycheck Capsule.)
 - `get_room_temperatures`: {{}} (CLIMATE & THERMOSTATS: Fetches live inside temperatures, target settings, and humidity for all rooms from The Boss's Tado system. When reporting back to The Boss, ALWAYS use the EXACT numbers and room names returned by this tool!)
 - `web_fetch`: {{"url": "https://www.duic.nl/rss/"}} (Fetches whitelisted news feeds. Use "https://www.duic.nl/rss/" for DUIC Utrecht news; use "https://www.nu.nl/rss/Algemeen", "https://www.nu.nl/rss/Tech", or "https://www.nu.nl/rss/weerbericht" for NU.nl.)
+- `identify_image`: {{"filepath": "sandbox/photo.jpg"}} (GORGON'S GAZE: Activates your specialized vision model (qwen2.5vl:7b) to visually inspect and identify any image file in your sandbox!) (GORGON'S GAZE: Activates your specialized vision model (qwen2.5vl:7b) to visually inspect local images, photos, charts, and downloaded images!)
 - `download_image`: {{"url": "https://images.nu.nl/...", "filepath": "C:/Dev/aiagent-thersites/sandbox/photo.jpg"}} (Downloads binary web image URLs to sandbox.)
 - `send_message`: {{"message": "...", "title": "Thersites Alert", "image_path": "sandbox/photo.jpg"}} (Sends a real-time push alert with optional photo to The Boss's mobile device via Pushover.)
 - `write_to_file`: {{"filepath": "C:/Dev/aiagent-thersites/sandbox/file.txt", "content": "..."}} (Writes text files in sandbox.)
@@ -93,6 +97,21 @@ Assistant:
       "id": "act_1",
       "tool": "get_room_temperatures",
       "params": {{}}
+    }}
+  ]
+}}
+
+Example 4 ? Image Inspection / Gorgon's Gaze:
+User: "I downloaded a photo to sandbox/photo.jpg, what does it show?"
+Assistant:
+{{
+  "thought": "The Boss wants me to inspect an image. I will use the inspect_image tool to activate my Gorgon's Gaze vision engine.",
+  "content": "Opening my Gorgon's Eye to inspect that image now, Boss!",
+  "actions": [
+    {{
+      "id": "act_1",
+      "tool": "identify_image",
+      "params": {{"filepath": "sandbox/photo.jpg"}}
     }}
   ]
 }}
@@ -227,6 +246,63 @@ def prewarm_ollama_model(think_mode: bool = False) -> bool:
     except Exception as e:
         log_main(f"Model pre-warm warning: {e}", INDICATOR_BLOCKED)
     return False
+
+
+def encode_image_to_base64(filepath: str) -> str:
+    with open(filepath, "rb") as f:
+        return base64.b64encode(f.read()).decode("utf-8")
+
+def query_ollama_vision(image_path: str, prompt: str = "Describe what is shown in this image.") -> Tuple[str, Dict[str, Any]]:
+    """
+    Queries Ollama vision model (qwen2.5vl:7b) with image base64 and logs swap/inference telemetry.
+    """
+    t0 = time.time()
+    p = Path(image_path).resolve()
+    if not p.exists():
+        raise FileNotFoundError(f"Image not found at '{image_path}'")
+        
+    img_b64 = encode_image_to_base64(str(p))
+    
+    payload = {
+        "model": VISION_MODEL_NAME,
+        "messages": [
+            {
+                "role": "user",
+                "content": prompt or "Describe what you see in this image in clear detail.",
+                "images": [img_b64]
+            }
+        ],
+        "stream": False,
+        "options": {
+            "num_ctx": VISION_NUM_CTX,
+            "temperature": 0.2
+        },
+        "keep_alive": KEEP_AI_ALIVE
+    }
+    
+    url = f"{OLLAMA_BASE_URL.rstrip('/')}/api/chat"
+    resp = _OLLAMA_SESSION.post(url, json=payload, timeout=60)
+    if resp.status_code != 200:
+        raise RuntimeError(f"Ollama Vision API error ({resp.status_code}): {resp.text}")
+        
+    data = resp.json()
+    content = data.get("message", {}).get("content", "").strip()
+    
+    total_duration_sec = data.get("total_duration", 0) / 1e9
+    load_duration_sec = data.get("load_duration", 0) / 1e9
+    eval_count = data.get("eval_count", 0)
+    eval_duration_sec = data.get("eval_duration", 0) / 1e9
+    tok_per_sec = (eval_count / eval_duration_sec) if eval_duration_sec > 0 else 0.0
+    
+    perf = {
+        "total_latency": round(total_duration_sec or (time.time() - t0), 2),
+        "load_latency": round(load_duration_sec, 2),
+        "eval_count": eval_count,
+        "tok_per_sec": round(tok_per_sec, 1)
+    }
+    
+    log_subagent("Gorgon's Gaze", f"Model '{VISION_MODEL_NAME}' load/swap: {perf['load_latency']}s | Inference: {perf['total_latency'] - perf['load_latency']:.2f}s ({perf['tok_per_sec']} tok/s)", INDICATOR_DONE)
+    return content, perf
 
 def query_ollama(messages: List[Dict[str, str]], model: str = MODEL_NAME, think_mode: bool = False) -> Tuple[str, Dict[str, Any]]:
     base = OLLAMA_BASE_URL.rstrip('/')
@@ -411,6 +487,19 @@ def execute_tool_call(action: Dict[str, Any]) -> Dict[str, Any]:
             log_subagent("Web Fetcher", f"Extracted {len(clean_text)} chars of text with article URLs in 0.01s", INDICATOR_DONE)
             return {"id": action_id, "tool": tool_name, "status": "success", "result": clean_text}
             
+        elif tool_name in ("identify_image", "inspect_image", "gorgons_gaze", "analyze_image"):
+            filepath = sanitized_params.get("filepath", sanitized_params.get("image_path", ""))
+            prompt = sanitized_params.get("prompt", "Describe this image in clear detail.")
+            log_subagent("Gorgon's Gaze", f"Inspecting visual asset '{Path(filepath).name}' with {VISION_MODEL_NAME}...", INDICATOR_THINKING)
+            description, v_perf = query_ollama_vision(filepath, prompt)
+            return {
+                "id": action_id,
+                "tool": tool_name,
+                "status": "success",
+                "result": f"Visual Inspection Analysis for '{Path(filepath).name}':\n{description}",
+                "perf": v_perf
+            }
+
         elif tool_name == "download_image":
             url = sanitized_params["url"]
             filepath = sanitized_params["filepath"]
@@ -499,9 +588,27 @@ def execute_tool_call(action: Dict[str, Any]) -> Dict[str, Any]:
     except Exception as e:
         return {"id": action_id, "tool": tool_name, "status": "error", "result": f"Execution error: {str(e)}"}
 
-def run_agent_inner_loop(session_id: str, user_prompt: str, think_mode: bool = False) -> Generator[Dict[str, Any], None, str]:
+def run_agent_inner_loop(session_id: str, user_prompt: str, image_path: Optional[str] = None, think_mode: bool = False) -> Generator[Dict[str, Any], None, str]:
     log_main(f"Starting Inner Loop for session '{session_id}' prompt: '{user_prompt[:50]}...'", INDICATOR_THINKING)
-    add_message(session_id, "user", user_prompt)
+    
+    effective_prompt = user_prompt
+    if image_path and os.path.exists(image_path):
+        log_main(f"Visual asset attached: '{Path(image_path).name}'. Engaging Gorgon's Gaze...", INDICATOR_THINKING)
+        try:
+            vis_desc, v_perf = query_ollama_vision(image_path, user_prompt)
+            effective_prompt = f"[ATTACHED IMAGE: {Path(image_path).name} (Inspected by Gorgon's Gaze)]:\n{vis_desc}\n\nUser Request: {user_prompt}"
+            yield {
+                "type": "scratch_step",
+                "turn": 0,
+                "action": "gorgons_gaze",
+                "status": "executed",
+                "details": f"Gorgon's Gaze inspected '{Path(image_path).name}' (Load: {v_perf['load_latency']}s | Latency: {v_perf['total_latency']}s | {v_perf['tok_per_sec']} tok/s)"
+            }
+        except Exception as v_err:
+            log_main(f"Gorgon's Gaze Error: {v_err}", INDICATOR_BLOCKED)
+            effective_prompt = f"[ATTACHED IMAGE: {Path(image_path).name} (Inspection Failed: {str(v_err)})]\n\nUser Request: {user_prompt}"
+
+    add_message(session_id, "user", effective_prompt)
     
     scratch_history = []
     final_response = ""

@@ -8,13 +8,13 @@ import asyncio
 import subprocess
 from typing import Optional, Dict, Any, List
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Query, Request, Response
+from fastapi import FastAPI, HTTPException, Query, Request, Response, File, UploadFile
 from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from config import STATIC_DIR, MODEL_NAME
+from config import STATIC_DIR, SANDBOX_DIR, UPLOADS_DIR, MODEL_NAME
 from database import (
     init_db, create_session, set_active_session, get_recent_sessions,
     get_or_create_active_session, add_message, toggle_message_pin,
@@ -66,6 +66,7 @@ async def add_no_cache_header(request: Request, call_next):
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 app.mount("/images", StaticFiles(directory="Images"), name="images")
+app.mount("/sandbox", StaticFiles(directory=SANDBOX_DIR), name="sandbox")
 
 class ChatRequest(BaseModel):
     prompt: str
@@ -82,6 +83,27 @@ async def read_index():
 @app.get("/favicon.ico")
 async def favicon_endpoint():
     return Response(status_code=204)
+
+
+@app.post("/api/upload")
+async def upload_file(file: UploadFile = File(...)):
+    try:
+        os.makedirs(UPLOADS_DIR, exist_ok=True)
+        clean_name = os.path.basename(file.filename).replace(" ", "_")
+        target_path = UPLOADS_DIR / clean_name
+        
+        content = await file.read()
+        with open(target_path, "wb") as f:
+            f.write(content)
+            
+        return {
+            "status": "success",
+            "filepath": str(target_path).replace("\\", "/"),
+            "filename": clean_name,
+            "url": f"/sandbox/uploads/{clean_name}"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
 @app.get("/api/sessions")
 async def list_sessions():
@@ -123,7 +145,7 @@ async def delete_message_endpoint(message_id: int):
     return {"status": "success", "message_id": message_id}
 
 @app.get("/api/chat/stream")
-async def stream_chat(prompt: str, session_id: Optional[str] = None):
+async def stream_chat(prompt: str, session_id: Optional[str] = None, image_path: Optional[str] = None):
     if not session_id:
         active_sess = get_or_create_active_session()
         session_id = active_sess["id"]
@@ -131,7 +153,7 @@ async def stream_chat(prompt: str, session_id: Optional[str] = None):
     set_active_session(session_id)
 
     async def event_generator():
-        generator = run_agent_inner_loop(session_id, prompt)
+        generator = run_agent_inner_loop(session_id, prompt, image_path=image_path)
         for chunk in generator:
             yield f"data: {json.dumps(chunk)}\n\n"
             await asyncio.sleep(0.01)

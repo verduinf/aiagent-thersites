@@ -252,5 +252,44 @@ class TestThersitesSuite(unittest.TestCase):
         database.delete_clue("study_note")
 
 
+
+    def test_12_gorgons_gaze_image_validation_and_encoding(self):
+        from warden import validate_image_path, inspect_and_authorize
+        from engine import encode_image_to_base64
+        import tempfile
+        
+        # 1. Test validate_image_path on existing image
+        test_img_path = Path("Images/Thersites_orginal_v2.png")
+        if test_img_path.exists():
+            ok, msg = validate_image_path(str(test_img_path))
+            self.assertTrue(ok)
+            self.assertIn("authorized", msg)
+            
+            # Test base64 encoding
+            b64_str = encode_image_to_base64(str(test_img_path))
+            self.assertIsInstance(b64_str, str)
+            self.assertTrue(len(b64_str) > 100)
+            
+        # 2. Test invalid extension
+        bad_ext_path = Path("sandbox/test_bad.txt")
+        with open(bad_ext_path, "w") as f:
+            f.write("not an image")
+        ok_bad, msg_bad = validate_image_path(str(bad_ext_path))
+        self.assertFalse(ok_bad)
+        self.assertIn("invalid image extension", msg_bad)
+        if bad_ext_path.exists():
+            os.remove(bad_ext_path)
+            
+        # 3. Test non-existent file
+        ok_none, msg_none = validate_image_path("sandbox/does_not_exist_99.png")
+        self.assertFalse(ok_none)
+        self.assertIn("does not exist", msg_none)
+        
+        # 4. Test inspect_and_authorize for inspect_image
+        if test_img_path.exists():
+            ok_auth, msg_auth, _ = inspect_and_authorize("identify_image", {"filepath": str(test_img_path), "prompt": "Describe"})
+            self.assertTrue(ok_auth)
+
+
 if __name__ == '__main__':
     unittest.main()

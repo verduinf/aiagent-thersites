@@ -5,7 +5,7 @@ Enforces sandbox enclosure, domain whitelisting, and SQL table mutation rules.
 import os
 import re
 from pathlib import Path
-from config import SANDBOX_DIR, URL_DOMAIN_WHITELIST
+from config import BASE_DIR, SANDBOX_DIR, UPLOADS_DIR, URL_DOMAIN_WHITELIST
 
 from typing import Tuple, Dict, Any, List, Optional
 
@@ -111,6 +111,32 @@ def validate_sql_query(query: str) -> Tuple[bool, str]:
         
     return False, "SQL mutations allowed ONLY on table 'thersites_scratchpad'."
 
+
+VALID_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tiff"}
+
+def validate_image_path(filepath: str) -> Tuple[bool, str]:
+    if not filepath or not isinstance(filepath, str):
+        return False, "Missing or invalid image file path."
+        
+    try:
+        p = Path(filepath).resolve()
+        if not p.exists():
+            return False, f"Image file does not exist at '{filepath}'"
+            
+        if p.suffix.lower() not in VALID_IMAGE_EXTENSIONS:
+            return False, f"File '{p.name}' has invalid image extension '{p.suffix}'. Must be one of: {', '.join(sorted(VALID_IMAGE_EXTENSIONS))}"
+            
+        sandbox_res = SANDBOX_DIR.resolve()
+        base_res = BASE_DIR.resolve()
+        
+        # Allowed in sandbox, uploads, or project Images directory
+        if sandbox_res in p.parents or p == sandbox_res or base_res in p.parents:
+            return True, f"Image path '{filepath}' authorized for visual analysis."
+        else:
+            return False, f"Path violation. Target image '{filepath}' is outside project boundaries."
+    except Exception as e:
+        return False, f"Invalid image path structure: {str(e)}"
+
 def inspect_and_authorize(tool_name: str, params: Dict[str, Any]) -> Tuple[bool, str, Dict[str, Any]]:
     if tool_name == "web_fetch":
         url = params.get("url", "")
@@ -164,6 +190,11 @@ def inspect_and_authorize(tool_name: str, params: Dict[str, Any]) -> Tuple[bool,
         if not key:
             return False, "Missing required 'key' parameter for unremember tool.", params
         return True, f"Memory clue unremember '{key}' authorized.", params
+
+    elif tool_name in ("identify_image", "inspect_image", "gorgons_gaze", "analyze_image"):
+        filepath = params.get("filepath", params.get("image_path", params.get("path", "")))
+        ok, msg = validate_image_path(filepath)
+        return ok, msg, params
 
     elif tool_name in ("write_to_scratchpad", "none", "finish", ""):
         return True, "Authorized action.", params
