@@ -27,12 +27,12 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    async function loadSessions() {
+    async function loadSessions(targetSessionId = null) {
         try {
             const res = await fetch("/api/sessions");
             const data = await res.json();
             const sessions = Array.isArray(data) ? data : (data.sessions || []);
-            const activeId = data.active_session_id || currentSessionId;
+            const selectId = targetSessionId || currentSessionId || data.active_session_id;
 
             sessionSelect.innerHTML = "";
             sessions.forEach(s => {
@@ -43,8 +43,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 sessionSelect.appendChild(opt);
             });
 
-            if (activeId && sessionSelect.querySelector(`option[value="${activeId}"]`)) {
-                currentSessionId = activeId;
+            if (selectId && sessionSelect.querySelector(`option[value="${selectId}"]`)) {
+                currentSessionId = selectId;
                 sessionSelect.value = currentSessionId;
             } else if (sessionSelect.options.length > 0) {
                 currentSessionId = sessionSelect.value;
@@ -59,7 +59,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const res = await fetch("/api/sessions", { method: "POST" });
             const newSess = await res.json();
             currentSessionId = newSess.id;
-            await loadSessions();
+            await loadSessions(currentSessionId);
             await loadMessages(currentSessionId);
         } catch (err) {
             console.error("Error creating session:", err);

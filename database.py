@@ -88,26 +88,9 @@ def set_active_session(session_id: str) -> Dict[str, Any]:
         return {"id": session_id, "is_active": 1}
 
 def get_recent_sessions(limit: int = 20) -> List[Dict[str, Any]]:
-    """Returns non-empty sessions ordered by the timestamp of their most recent message."""
+    """Returns sessions ordered by their active status and timestamp."""
     with get_db_connection() as conn:
         rows = conn.execute("""
-            SELECT s.id, s.title, s.created_at, s.is_active,
-                   COUNT(m.id) as msg_count,
-                   COALESCE(MAX(m.created_at), s.created_at) as last_activity
-            FROM sessions s
-            JOIN messages m ON s.id = m.session_id AND m.role NOT LIKE 'test_%'
-            WHERE s.id NOT LIKE 'test_%' AND s.id NOT LIKE 'Argus%'
-            GROUP BY s.id
-            HAVING msg_count > 0
-            ORDER BY last_activity DESC
-            LIMIT ?
-        """, (limit,)).fetchall()
-        return [dict(r) for r in rows]
-
-def get_or_create_active_session() -> Dict[str, Any]:
-    """Returns the session with the most recent message, setting it active."""
-    with get_db_connection() as conn:
-        active = conn.execute("""
             SELECT s.id, s.title, s.created_at, s.is_active,
                    COUNT(m.id) as msg_count,
                    COALESCE(MAX(m.created_at), s.created_at) as last_activity
@@ -115,10 +98,38 @@ def get_or_create_active_session() -> Dict[str, Any]:
             LEFT JOIN messages m ON s.id = m.session_id AND m.role NOT LIKE 'test_%'
             WHERE s.id NOT LIKE 'test_%' AND s.id NOT LIKE 'Argus%'
             GROUP BY s.id
-            ORDER BY last_activity DESC
+            ORDER BY s.is_active DESC, last_activity DESC
+            LIMIT ?
+        """, (limit,)).fetchall()
+        return [dict(r) for r in rows]
+
+def get_or_create_active_session() -> Dict[str, Any]:
+    """Returns the currently active session (is_active = 1), or most recent."""
+    with get_db_connection() as conn:
+        active = conn.execute("""
+            SELECT s.id, s.title, s.created_at, s.is_active,
+                   COUNT(m.id) as msg_count,
+                   COALESCE(MAX(m.created_at), s.created_at) as last_activity
+            FROM sessions s
+            LEFT JOIN messages m ON s.id = m.session_id AND m.role NOT LIKE 'test_%'
+            WHERE s.is_active = 1 AND s.id NOT LIKE 'test_%' AND s.id NOT LIKE 'Argus%'
+            GROUP BY s.id
             LIMIT 1
         """).fetchone()
         
+        if not active:
+            active = conn.execute("""
+                SELECT s.id, s.title, s.created_at, s.is_active,
+                       COUNT(m.id) as msg_count,
+                       COALESCE(MAX(m.created_at), s.created_at) as last_activity
+                FROM sessions s
+                LEFT JOIN messages m ON s.id = m.session_id AND m.role NOT LIKE 'test_%'
+                WHERE s.id NOT LIKE 'test_%' AND s.id NOT LIKE 'Argus%'
+                GROUP BY s.id
+                ORDER BY last_activity DESC
+                LIMIT 1
+            """).fetchone()
+            
         if active:
             active_dict = dict(active)
             conn.execute("UPDATE sessions SET is_active = 0")
