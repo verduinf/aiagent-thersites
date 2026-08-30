@@ -1,77 +1,147 @@
 """
 Tado Climate API Client for Local Intern Thersites
-Handles OAuth2 token exchange with in-memory caching (10-min lifecycle),
+Handles OAuth2 PKCE token exchange with in-memory caching (10-min lifecycle),
 home discovery, and room temperature/humidity extraction.
 """
 import os
+import re
 import time
+import base64
+import hashlib
+import secrets
 import requests
 from typing import Dict, Any, Optional
 
-from config import BASE_DIR
-
-# Load credentials from environment
-TADO_USERNAME = os.environ.get("TADO_USERNAME", os.environ.get("TADO_EMAIL", ""))
-TADO_PASSWORD = os.environ.get("TADO_PASSWORD", "")
-
-# In-memory Token & Home Cache
+# In-memory Token & Home Cache (10-minute lifecycle)
 _CACHED_ACCESS_TOKEN: Optional[str] = None
 _TOKEN_EXPIRES_AT: float = 0.0
 _CACHED_HOME_ID: Optional[int] = None
-_CACHED_ZONES_MAP: Dict[int, str] = {}
+_CACHED_HOME_NAME: str = "Home"
+_CACHED_ZONES_MAP: Dict[int, Dict[str, Any]] = {}
 _ZONES_MAP_EXPIRES_AT: float = 0.0
+
+def load_credentials():
+    """Loads Tado credentials from environment or .env file."""
+    username = os.environ.get("TADO_USERNAME") or os.environ.get("TADO_EMAIL", "")
+    password = os.environ.get("TADO_PASSWORD", "")
+    
+    if not username or not password:
+        # Check .env directly if not in os.environ
+        try:
+            with open(".env", "r", encoding="utf-8-sig") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        k, v = line.split("=", 1)
+                        k = k.strip()
+                        v = v.strip().strip('"\'').strip()
+                        if k in ("TADO_USERNAME", "TADO_EMAIL") and not username:
+                            username = v
+                        elif k == "TADO_PASSWORD" and not password:
+                            password = v
+        except Exception:
+            pass
+            
+    return username, password
 
 def set_tado_credentials(username: str, password: str):
     """Programmatically set or update Tado credentials."""
-    global TADO_USERNAME, TADO_PASSWORD, _CACHED_ACCESS_TOKEN, _TOKEN_EXPIRES_AT
-    TADO_USERNAME = username
-    TADO_PASSWORD = password
+    global _CACHED_ACCESS_TOKEN, _TOKEN_EXPIRES_AT
+    os.environ["TADO_USERNAME"] = username
+    os.environ["TADO_PASSWORD"] = password
     _CACHED_ACCESS_TOKEN = None
     _TOKEN_EXPIRES_AT = 0.0
 
 def get_valid_access_token() -> str:
     """
-    Exchanges Tado credentials for an OAuth2 bearer token.
+    Exchanges Tado credentials for an OAuth2 Bearer token via PKCE.
     Reuses cached token if valid (Tado tokens expire in 10 minutes / 600s).
     """
     global _CACHED_ACCESS_TOKEN, _TOKEN_EXPIRES_AT
     now = time.time()
     
-    # Return cached token if valid for at least 60 more seconds
+    # Return cached token if valid for at least 60 more seconds (prevents mid-request expiry)
     if _CACHED_ACCESS_TOKEN and now < (_TOKEN_EXPIRES_AT - 60):
         return _CACHED_ACCESS_TOKEN
         
-    username = TADO_USERNAME or os.environ.get("TADO_USERNAME") or os.environ.get("TADO_EMAIL", "")
-    password = TADO_PASSWORD or os.environ.get("TADO_PASSWORD", "")
-    
+    username, password = load_credentials()
     if not username or not password:
-        raise ValueError("Tado credentials not configured. Please set TADO_USERNAME and TADO_PASSWORD in .env")
+        raise ValueError("Tado credentials not found. Please configure TADO_USERNAME and TADO_PASSWORD in .env")
         
-    token_url = "https://my.tado.com/oauth/token"
-    payload = {
-        "client_id": "tado-webapp",
-        "grant_type": "password",
-        "scope": "home.user",
-        "username": username,
-        "password": password,
+    # 1. Generate PKCE Verifier & Challenge
+    code_verifier = base64.urlsafe_b64encode(secrets.token_bytes(32)).rstrip(b'=').decode('utf-8')
+    challenge_bytes = hashlib.sha256(code_verifier.encode('utf-8')).digest()
+    code_challenge = base64.urlsafe_b64encode(challenge_bytes).rstrip(b'=').decode('utf-8')
+    
+    session = requests.Session()
+    session.headers.update({
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+    })
+    
+    client_id = "af44f89e-ae86-4ebe-905f-6bf759cf6473"
+    redirect_uri = "https://app.tado.com/en/auth/authorize"
+    
+    auth_url = (
+        f"https://login.tado.com/oauth2/authorize?"
+        f"client_id={client_id}&"
+        f"response_type=code&"
+        f"scope=home.user&"
+        f"redirect_uri={redirect_uri}&"
+        f"code_challenge={code_challenge}&"
+        f"code_challenge_method=S256"
+    )
+    
+    r1 = session.get(auth_url, timeout=15)
+    r1.raise_for_status()
+    
+    hidden_inputs = dict(re.findall(r'<input[^>]+type=["\']hidden["\'][^>]+name=["\']([^"\']+)["\'][^>]+value=["\']([^"\']*)["\']', r1.text))
+    action_match = re.search(r'action=["\']([^"\']+)["\']', r1.text)
+    action_url = f"https://login.tado.com{action_match.group(1)}" if action_match else auth_url
+    
+    login_payload = {
+        **hidden_inputs,
+        "loginId": username,
+        "password": password
     }
     
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AI-Agent-Thersites"}
-    resp = requests.post(token_url, data=payload, headers=headers, timeout=15)
-    resp.raise_for_status()
+    r2 = session.post(action_url, data=login_payload, allow_redirects=True, timeout=15)
     
-    data = resp.json()
-    _CACHED_ACCESS_TOKEN = data["access_token"]
-    expires_in = int(data.get("expires_in", 599))
+    code_match = re.search(r'code=([^&]+)', r2.url)
+    if not code_match:
+        for resp in r2.history:
+            loc = resp.headers.get("Location", "")
+            if "code=" in loc:
+                code_match = re.search(r'code=([^&]+)', loc)
+                break
+                
+    if not code_match:
+        raise ValueError("Failed to obtain OAuth authorization code from Tado login. Please verify credentials.")
+        
+    auth_code = code_match.group(1)
+    
+    # 2. Exchange Authorization Code for Bearer Access Token
+    token_payload = {
+        "client_id": client_id,
+        "grant_type": "authorization_code",
+        "code": auth_code,
+        "redirect_uri": redirect_uri,
+        "code_verifier": code_verifier
+    }
+    tok_resp = session.post("https://login.tado.com/oauth2/token", data=token_payload, timeout=15)
+    tok_resp.raise_for_status()
+    
+    tok_data = tok_resp.json()
+    _CACHED_ACCESS_TOKEN = tok_data["access_token"]
+    expires_in = int(tok_data.get("expires_in", 599))
     _TOKEN_EXPIRES_AT = now + expires_in
     
     return _CACHED_ACCESS_TOKEN
 
-def get_home_id() -> int:
-    """Fetches and caches the user's primary Home ID."""
-    global _CACHED_HOME_ID
+def get_home_info() -> Dict[str, Any]:
+    """Fetches and caches the user's primary Home ID and Name."""
+    global _CACHED_HOME_ID, _CACHED_HOME_NAME
     if _CACHED_HOME_ID is not None:
-        return _CACHED_HOME_ID
+        return {"id": _CACHED_HOME_ID, "name": _CACHED_HOME_NAME}
         
     token = get_valid_access_token()
     headers = {
@@ -82,11 +152,12 @@ def get_home_id() -> int:
     resp.raise_for_status()
     
     data = resp.json()
-    _CACHED_HOME_ID = int(data["homeId"])
-    return _CACHED_HOME_ID
+    _CACHED_HOME_ID = int(data.get("homeId") or data.get("homes", [{}])[0].get("id"))
+    _CACHED_HOME_NAME = data.get("homes", [{}])[0].get("name", "Home")
+    return {"id": _CACHED_HOME_ID, "name": _CACHED_HOME_NAME}
 
-def get_zones_map(home_id: int) -> Dict[int, str]:
-    """Fetches and caches zone_id -> room name mapping (e.g. 1: 'Living Room')."""
+def get_zones_map(home_id: int) -> Dict[int, Dict[str, Any]]:
+    """Fetches and caches zone metadata (ID -> name, type)."""
     global _CACHED_ZONES_MAP, _ZONES_MAP_EXPIRES_AT
     now = time.time()
     if _CACHED_ZONES_MAP and now < _ZONES_MAP_EXPIRES_AT:
@@ -101,17 +172,23 @@ def get_zones_map(home_id: int) -> Dict[int, str]:
     resp.raise_for_status()
     
     zones = resp.json()
-    _CACHED_ZONES_MAP = {int(z["id"]): z["name"] for z in zones if "id" in z and "name" in z}
-    _ZONES_MAP_EXPIRES_AT = now + 3600  # Cache zone names for 1 hour
+    _CACHED_ZONES_MAP = {
+        int(z["id"]): {"name": z.get("name", f"Zone {z.get('id')}"), "type": z.get("type", "HEATING")}
+        for z in zones if "id" in z
+    }
+    _ZONES_MAP_EXPIRES_AT = now + 3600  # Cache zone metadata for 1 hour
     return _CACHED_ZONES_MAP
 
 def get_room_temperatures() -> Dict[str, Any]:
     """
-    Fetches the live temperature, target temperature, and humidity for all rooms.
-    Returns a clean structured dictionary and human-readable text summary.
+    Fetches live temperatures, target settings, humidity, and heating states for all rooms.
+    Returns structured room data and a human-readable summary.
     """
     try:
-        home_id = get_home_id()
+        home_info = get_home_info()
+        home_id = home_info["id"]
+        home_name = home_info["name"]
+        
         zones_map = get_zones_map(home_id)
         token = get_valid_access_token()
         
@@ -125,31 +202,36 @@ def get_room_temperatures() -> Dict[str, Any]:
         
         zone_states = resp.json().get("zoneStates", {})
         rooms = {}
-        summary_lines = [f"Tado Climate Status (Home ID: {home_id}):"]
+        summary_lines = [f"Tado Climate Status ({home_name}):"]
         
-        for zid_str, state in zone_states.items():
-            zid = int(zid_str)
-            room_name = zones_map.get(zid, f"Room {zid}")
+        for zid, meta in zones_map.items():
+            zid_str = str(zid)
+            room_name = meta["name"]
+            room_type = meta["type"]
+            state = zone_states.get(zid_str, {})
             
             # Extract sensor readings
-            sensor_dp = state.get("sensorDataPoints", {})
-            temp_dp = sensor_dp.get("insideTemperature")
-            humidity_dp = sensor_dp.get("humidity")
+            sensor = state.get("sensorDataPoints") or {}
+            temp_obj = sensor.get("insideTemperature") or {}
+            hum_obj = sensor.get("humidity") or {}
             
-            current_temp = temp_dp.get("celsius") if temp_dp else None
-            humidity = humidity_dp.get("percentage") if humidity_dp else None
+            current_temp = temp_obj.get("celsius")
+            humidity = hum_obj.get("percentage")
             
             # Extract target settings
-            setting = state.get("setting", {})
+            setting = state.get("setting") or {}
             power = setting.get("power", "OFF")
-            target_temp_obj = setting.get("temperature")
-            target_temp = target_temp_obj.get("celsius") if target_temp_obj else None
+            target_temp_obj = setting.get("temperature") or {}
+            target_temp = target_temp_obj.get("celsius")
             
-            # Extract heating activity
-            activity_dp = state.get("activityDataPoints", {})
-            heating_power = activity_dp.get("heatingPower", {}).get("percentage", 0.0) if activity_dp else 0.0
+            # Extract heating power
+            activity = state.get("activityDataPoints") or {}
+            heat_obj = activity.get("heatingPower") or {}
+            heating_power = heat_obj.get("percentage", 0.0)
             
             room_info = {
+                "name": room_name,
+                "type": room_type,
                 "current_temperature_celsius": current_temp,
                 "target_temperature_celsius": target_temp,
                 "humidity_percentage": humidity,
@@ -159,15 +241,16 @@ def get_room_temperatures() -> Dict[str, Any]:
             rooms[room_name] = room_info
             
             curr_str = f"{current_temp:.1f}?C" if current_temp is not None else "N/A"
-            targ_str = f"{target_temp:.1f}?C" if target_temp is not None else "OFF"
+            targ_str = f"{target_temp:.1f}?C" if (power == "ON" and target_temp is not None) else "OFF"
             hum_str = f"{humidity:.0f}%" if humidity is not None else "N/A"
             heat_str = f"{heating_power:.0f}%" if heating_power is not None else "0%"
             
-            summary_lines.append(f"- {room_name}: {curr_str} (Target: {targ_str}, Humidity: {hum_str}, Heating: {heat_str})")
+            summary_lines.append(f"- {room_name}: Current: {curr_str} | Target: {targ_str} | Humidity: {hum_str} | Heating: {heat_str}")
             
         return {
             "status": "success",
             "home_id": home_id,
+            "home_name": home_name,
             "rooms": rooms,
             "summary_text": "\n".join(summary_lines)
         }
