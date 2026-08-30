@@ -1,7 +1,7 @@
 # Workspace Behavioral Rules & Guidelines — AI Agent Thersites
 
 ## Core Philosophy
-This repository houses **AI Agent Thersites**: an autonomous, locally-hosted AI agent powered by `qwen3.5-9b` running via Ollama on the Aether laptop. 
+This repository houses **Local Intern Thersites**: an autonomous, locally-hosted AI agent powered by `qwen3.5-9b` running via Ollama on the Aether laptop. 
 
 ### Model Governance & Naming Policy
 * **STRICT NO-FALLBACK RULE**: Thersites operates **exclusively** on `qwen3.5:9b`. There are **zero** model fallbacks or auto-routers. Thersites either shows up for work or he doesn't.

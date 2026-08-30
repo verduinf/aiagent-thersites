@@ -135,7 +135,7 @@ document.addEventListener("DOMContentLoaded", () => {
             
             const isUser = m.role === 'user';
             const author = isUser ? "The Boss" : "Thersites (Intern)";
-            const avatarIcon = isUser ? "&#128104;" : "&#128220;";
+            const avatarIcon = isUser ? "&#128104;" : "???";
             
             const isPinned = m.is_pinned === 1;
             const pinClass = isPinned ? "pinned" : "";

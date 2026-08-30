@@ -45,7 +45,7 @@ async def lifespan(app: FastAPI):
     asyncio.create_task(asyncio.to_thread(prewarm_ollama_model))
     yield
 
-app = FastAPI(title="AI Agent Thersites", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="Local Intern Thersites", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
