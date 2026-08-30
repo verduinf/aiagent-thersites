@@ -20,3 +20,4 @@ Thumbs.db
 # Sandbox Generated Files
 sandbox/*
 !sandbox/.gitkeep
+*.lnk
