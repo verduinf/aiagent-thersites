@@ -22,7 +22,7 @@ def enforce_single_action_rule(actions: List[Dict[str, Any]]) -> Tuple[List[Dict
     if not actions or len(actions) <= 1:
         return actions, None
         
-    MEMORY_TOOLS = {"remember", "unremember"}
+    MEMORY_TOOLS = {"remember", "unremember", "list_internet_fav", "list_favorites"}
     PASSIVE_TOOLS = {"none", "finish", ""}
     
     external_actions = []
@@ -212,9 +212,17 @@ def inspect_and_authorize(tool_name: str, params: Dict[str, Any]) -> Tuple[bool,
     elif tool_name == "remember":
         key = params.get("key", "")
         clue = params.get("clue", params.get("value", ""))
+        entry_type = params.get("type", "memory")
         if not key or not clue:
             return False, "Missing required 'key' or 'clue' parameter for remember tool.", params
-        return True, f"Memory clue '{key}' authorized.", params
+        if "url" in str(entry_type).lower():
+            ok_url, msg_url = validate_url(clue)
+            if not ok_url:
+                return False, msg_url, params
+        return True, f"Memory ({entry_type}) '{key}' authorized.", params
+
+    elif tool_name in ("list_internet_fav", "list_favorites"):
+        return True, "Listing bookmarked internet favorites authorized by The Warden.", params
 
     elif tool_name == "unremember":
         key = params.get("key", "")

@@ -54,11 +54,17 @@ def init_db():
         conn.execute("""
             CREATE TABLE IF NOT EXISTS thersites_scratchpad (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                type TEXT DEFAULT 'memory',
                 key TEXT UNIQUE NOT NULL,
                 value TEXT NOT NULL,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        
+        # Migration: ensure type column exists on existing installations
+        cols = [r["name"] for r in conn.execute("PRAGMA table_info(thersites_scratchpad)").fetchall()]
+        if "type" not in cols:
+            conn.execute("ALTER TABLE thersites_scratchpad ADD COLUMN type TEXT DEFAULT 'memory'")
         
         conn.execute("""
             CREATE TABLE IF NOT EXISTS scratch_messages (
@@ -268,33 +274,45 @@ def delete_message(message_id: int) -> bool:
         conn.commit()
         return cursor.rowcount > 0
 
-def save_clue(key: str, value: str) -> Dict[str, Any]:
-    """Saves or updates a persistent memory clue in thersites_scratchpad."""
-    clean_key = str(key).strip().lower().replace(" ", "_")
+def save_clue(key: str, value: str, entry_type: str = "memory") -> Dict[str, Any]:
+    """Saves or updates a persistent memory clue or url_fav in thersites_scratchpad."""
+    raw_key = str(key).strip().lower().replace(" ", "_")
+    clean_type = "url_fav" if ("url" in str(entry_type).lower() or raw_key.startswith("url_fav:") or raw_key.startswith("fav_")) else "memory"
+    clean_key = raw_key.replace("url_fav:", "").replace("fav_", "")
     clean_val = str(value).strip()
     now = time.strftime("%Y-%m-%d %H:%M:%S")
     with get_db_connection() as conn:
         conn.execute("""
-            INSERT INTO thersites_scratchpad (key, value, updated_at)
-            VALUES (?, ?, ?)
-            ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
-        """, (clean_key, clean_val, now))
-    return {"key": clean_key, "value": clean_val, "updated_at": now}
+            INSERT INTO thersites_scratchpad (type, key, value, updated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(key) DO UPDATE SET type = excluded.type, value = excluded.value, updated_at = excluded.updated_at
+        """, (clean_type, clean_key, clean_val, now))
+    return {"type": clean_type, "key": clean_key, "value": clean_val, "updated_at": now}
 
 def delete_clue(key: str) -> bool:
     """Deletes a memory clue from thersites_scratchpad."""
-    clean_key = str(key).strip().lower().replace(" ", "_")
+    clean_key = str(key).strip().lower().replace(" ", "_").replace("url_fav:", "").replace("fav_", "")
     with get_db_connection() as conn:
         cursor = conn.execute("""
             DELETE FROM thersites_scratchpad WHERE key = ?
         """, (clean_key,))
         return cursor.rowcount > 0
 
-def get_all_clues(limit: int = 10) -> List[Dict[str, Any]]:
-    """Retrieves up to `limit` active memory clues from thersites_scratchpad."""
+def get_all_clues(limit: int = 15) -> List[Dict[str, Any]]:
+    """Retrieves up to `limit` active clues from thersites_scratchpad."""
     with get_db_connection() as conn:
         rows = conn.execute("""
-            SELECT key, value, updated_at FROM thersites_scratchpad
+            SELECT type, key, value, updated_at FROM thersites_scratchpad
             ORDER BY updated_at DESC LIMIT ?
         """, (limit,)).fetchall()
-        return [{"key": r["key"], "value": r["value"], "updated_at": r["updated_at"]} for r in rows]
+        return [{"type": r["type"] or "memory", "key": r["key"], "value": r["value"], "updated_at": r["updated_at"]} for r in rows]
+
+def get_clues_by_type(entry_type: str, limit: int = 10) -> List[Dict[str, Any]]:
+    """Retrieves clues filtered by type ('memory' vs 'url_fav')."""
+    with get_db_connection() as conn:
+        rows = conn.execute("""
+            SELECT type, key, value, updated_at FROM thersites_scratchpad
+            WHERE type = ?
+            ORDER BY updated_at DESC LIMIT ?
+        """, (entry_type, limit)).fetchall()
+        return [{"type": r["type"], "key": r["key"], "value": r["value"], "updated_at": r["updated_at"]} for r in rows]

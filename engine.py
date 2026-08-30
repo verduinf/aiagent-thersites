@@ -49,8 +49,9 @@ Always package your thoughts, replies, and actions in this JSON structure for EV
 }}
 
 Available Tools & Capabilities:
-- `remember`: {{"key": "url_fav:utrecht_news", "clue": "https://www.duic.nl/rss/"}} (PERSISTENT PAYCHECK MEMORY: When The Boss tells you to remember a fact, habit, preferred setting, or favorite URL (e.g. key: "url_fav:topic"), you MUST call this tool! It writes a permanent clue into your SQLite Paycheck Capsule for all future sessions.)
-- `unremember`: {{"key": "study_pref_temp"}} (Deletes an outdated clue from your Paycheck Capsule.)
+- `remember`: {{"type": "memory", "key": "cat_name", "clue": "Guus"}} OR {{"type": "url_fav", "key": "utrecht", "clue": "https://www.duic.nl/rss/"}} (PERSISTENT MEMORY: Saves a personal clue ("type": "memory") or a bookmarked web/RSS feed ("type": "url_fav") into your SQLite Paycheck Capsule!)
+- `unremember`: {{"key": "cat_name"}} (Deletes a clue or bookmark from your Paycheck Capsule.)
+- `list_internet_fav`: {{}} (FAVORITES: Retrieves all bookmarked favorite web/RSS feeds from your SQLite capsule!)
 - `get_room_temperatures`: {{}} (CLIMATE & THERMOSTATS: Fetches live inside temperatures, target settings, and humidity for all rooms from The Boss's Tado system. When reporting back to The Boss, ALWAYS use the EXACT numbers and room names returned by this tool!)
 - `web_fetch`: {{"url": "https://www.duic.nl/..."}} (WEB FETCHER: If The Boss provides a specific web/article URL, pass that exact URL! Only fetch "https://www.duic.nl/rss/" or "https://www.nu.nl/rss/Algemeen" if The Boss asks for general news without specifying a URL.)
 - `identify_image`: {{"filepath": "sandbox/photo.jpg"}} (GORGON'S GAZE: Activates your specialized vision model (qwen2.5vl:7b) to visually inspect and describe any image file in your sandbox!)
@@ -579,10 +580,11 @@ def execute_tool_call(action: Dict[str, Any]) -> Dict[str, Any]:
         elif tool_name == "remember":
             key = sanitized_params.get("key", "")
             clue = sanitized_params.get("clue", sanitized_params.get("value", ""))
+            entry_type = sanitized_params.get("type", "memory")
             from database import save_clue
-            res = save_clue(key, clue)
-            log_subagent("Memory Capsule", f"Saved clue '{res['key']}': '{res['value']}'", INDICATOR_DONE)
-            return {"id": action_id, "tool": tool_name, "status": "success", "result": f"Clue saved to Paycheck Capsule: [{res['key']}] -> {res['value']}"}
+            res = save_clue(key, clue, entry_type=entry_type)
+            log_subagent("Memory Capsule", f"Saved [{res['type']}] '{res['key']}': '{res['value']}'", INDICATOR_DONE)
+            return {"id": action_id, "tool": tool_name, "status": "success", "result": f"Clue saved to Paycheck Capsule [{res['type']}]: [{res['key']}] -> {res['value']}"}
 
         elif tool_name == "unremember":
             key = sanitized_params.get("key", "")
@@ -591,6 +593,13 @@ def execute_tool_call(action: Dict[str, Any]) -> Dict[str, Any]:
             status_msg = f"Clue '{key}' deleted from Paycheck Capsule" if deleted else f"Clue '{key}' not found in Paycheck Capsule"
             log_subagent("Memory Capsule", status_msg, INDICATOR_DONE)
             return {"id": action_id, "tool": tool_name, "status": "success", "result": status_msg}
+
+        elif tool_name in ("list_internet_fav", "list_favorites"):
+            from database import get_clues_by_type
+            favs = get_clues_by_type("url_fav", limit=20)
+            fav_map = {f['key']: f['value'] for f in favs}
+            log_subagent("Memory Capsule", f"Retrieved {len(fav_map)} bookmarked internet favorites", INDICATOR_DONE)
+            return {"id": action_id, "tool": tool_name, "status": "success", "result": f"Bookmarked Internet Favorites: {fav_map}"}
 
         elif tool_name == "sqlite_query_executor":
             query = sanitized_params["query"]
@@ -768,7 +777,7 @@ def run_agent_inner_loop(session_id: str, user_prompt: str, image_path: Optional
                 action_results.append(res)
                 add_scratch_message(session_id, turn, res.get("tool", "unknown"), json.dumps(res))
                 # External actions require subsequent turn observation; memory actions (remember/unremember) are internal reflexes
-                if tool_name not in ("remember", "unremember"):
+                if tool_name not in ("remember", "unremember", "list_internet_fav", "list_favorites"):
                     has_external_action = True
             
         if action_results:

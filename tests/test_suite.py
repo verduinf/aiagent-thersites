@@ -306,24 +306,28 @@ class TestThersitesSuite(unittest.TestCase):
 
 
 
-    def test_13_url_fav_memory_and_ssrf(self):
+    def test_13_typed_memory_and_list_favorites(self):
         import database
         from engine import execute_tool_call
         
-        # 1. Test saving url_fav via remember tool
-        res = execute_tool_call({
-            "id": "act_mem_url",
-            "tool": "remember",
-            "params": {"key": "url_fav:utrecht_news", "clue": "https://www.duic.nl/rss/"}
-        })
-        self.assertEqual(res["status"], "success")
-        self.assertIn("Clue saved", res["result"])
+        # 1. Test database save_clue with type='memory' vs type='url_fav'
+        database.save_clue("cat_name", "Guus", entry_type="memory")
+        database.save_clue("utrecht", "https://www.duic.nl/rss/", entry_type="url_fav")
         
-        clues = database.get_all_clues()
-        self.assertTrue(any(c["key"] == "url_fav:utrecht_news" and "duic.nl" in c["value"] for c in clues))
+        memories = database.get_clues_by_type("memory")
+        self.assertTrue(any(c["key"] == "cat_name" and c["value"] == "Guus" for c in memories))
+        
+        favs = database.get_clues_by_type("url_fav")
+        self.assertTrue(any(f["key"] == "utrecht" and "duic.nl" in f["value"] for f in favs))
+        
+        # 2. Test engine execute_tool_call for list_internet_fav
+        res = execute_tool_call({"id": "act_list_fav", "tool": "list_internet_fav", "params": {}})
+        self.assertEqual(res["status"], "success")
+        self.assertIn("utrecht", res["result"])
         
         # Cleanup
-        database.delete_clue("url_fav:utrecht_news")
+        database.delete_clue("cat_name")
+        database.delete_clue("utrecht")
 
 
 if __name__ == '__main__':
