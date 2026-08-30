@@ -194,12 +194,13 @@ def query_ollama(messages: List[Dict[str, str]], model: str = MODEL_NAME, think_
     payload = {
         "model": model,
         "messages": messages,
+        "format": "json",
         "keep_alive": KEEP_AI_ALIVE,
         "think": think_mode,
         "options": {
             "num_ctx": dynamic_num_ctx,
             "num_thread": 8,
-            "temperature": 0.7
+            "temperature": 0.3
         },
         "stream": False
     }
