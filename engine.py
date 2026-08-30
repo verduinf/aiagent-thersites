@@ -151,6 +151,8 @@ def clean_html_to_text(html_content: str, max_chars: int = 4000) -> str:
     text = re.sub(r'<enclosure\s+[^>]*url=["\']([^"\']+)["\'][^>]*>', r' [IMAGE: \1] ', text, flags=re.DOTALL | re.IGNORECASE)
     text = re.sub(r'<[^>]+>', ' ', text)
     text = re.sub(r'\s+', ' ', text).strip()
+    if not text:
+        return "[PAGE CONTENT]: No direct textual body extracted (page may require JavaScript rendering). Try fetching category feeds like https://www.nu.nl/rss/Algemeen or https://www.nu.nl/rss/Binnenland."
     return text[:max_chars]
 
 def prewarm_ollama_model(think_mode: bool = False) -> bool:
