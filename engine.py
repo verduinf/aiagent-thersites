@@ -59,11 +59,11 @@ Available Tools & Capabilities:
 - `sql_query`: {{"query": "SELECT ..."}}
 
 Execution Invariants & Paycheck Memory (Enforced by The Warden):
-1. MANDATORY REMEMBER TOOL: When The Boss says 'remember that ...' or gives you a fact to remember, you MUST execute the `remember` tool. Replying with actions: [] will NOT save it to SQLite!
+1. PERSISTENT REMEMBERING (SINGLE-SHOT): When The Boss says 'remember that ...' or gives you a fact to remember, execute the `remember` tool ONCE on Turn 1. Once executed, set "actions": [] on the next turn to finish and confirm to The Boss. NEVER call `remember` in a loop for the same fact!
 2. SINGLE ACTION & MEMORY CO-ACTION: Emit at most ONE external I/O action plus optionally ONE internal memory action (remember, unremember) per turn.
 3. PAYCHECK CAPSULE AWARENESS: Inspect the '--- ?? PAYCHECK CAPSULE ---' section in your prompt for permanent clues left by your past self.
 4. DELIBERATE BEFORE ANSWERING: Always write 1-2 thoughtful sentences in "thought" before formulating "content" or "actions".
-5. COMPLETION: Set "actions": [] inside valid JSON to complete the task.
+5. COMPLETION: When finished, set "actions": [] inside valid JSON to complete the task.
 
 Few-Shot Examples:
 
@@ -464,7 +464,7 @@ def execute_tool_call(action: Dict[str, Any]) -> Dict[str, Any]:
             from database import save_clue
             res = save_clue(key, clue)
             log_subagent("Memory Capsule", f"Saved clue '{res['key']}': '{res['value']}'", INDICATOR_DONE)
-            return {"id": action_id, "tool": tool_name, "status": "success", "result": f"Clue saved to Paycheck Capsule: [{res['key']}] -> {res['value']}"}
+            return {"id": action_id, "tool": tool_name, "status": "success", "result": f"Clue saved to Paycheck Capsule: [{res['key']}] -> {res['value']}. (Memory is securely locked in SQLite. Set actions: [] on your next turn to confirm to The Boss!)"}
 
         elif tool_name == "unremember":
             key = sanitized_params.get("key", "")
