@@ -9,6 +9,7 @@ and automatically cleans up test data upon completion via database.cleanup_test_
 import os
 import sys
 import unittest
+from unittest.mock import patch, MagicMock
 from pathlib import Path
 
 sys.path.insert(0, str(Path("C:/Dev/aiagent-thersites").resolve()))
@@ -123,21 +124,28 @@ class TestThersitesSuite(unittest.TestCase):
         self.assertNotIn(msg_id, msg_ids)
 
 
-    def test_08_pushover_notification(self):
-        # 1. Test Warden authorization
-        ok, msg, params = inspect_and_authorize("send_pushover_alert", {"message": "Test Alert", "title": "Unit Test"})
+    @patch("requests.post")
+    def test_08_pushover_notification(self, mock_post):
+        # Ensure mock HTTP response so NO live network requests or phone buzzes occur
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.text = '{"status": 1}'
+        mock_post.return_value = mock_resp
+
+        # 1. Test Warden authorization for send_message and aliases
+        ok, msg, params = inspect_and_authorize("send_message", {"message": "Test Alert", "title": "Unit Test"})
         self.assertTrue(ok)
         self.assertIn("authorized", msg.lower())
         
-        ok, msg, params = inspect_and_authorize("send_pushover_alert", {})
+        ok, msg, params = inspect_and_authorize("send_message", {})
         self.assertFalse(ok)
         self.assertIn("missing", msg.lower())
         
-        # 2. Test Engine simulation execution
+        # 2. Test Engine execution with mocked network request
         from engine import execute_tool_call
         res = execute_tool_call({
             "id": "act_1",
-            "tool": "send_pushover_alert",
+            "tool": "send_message",
             "params": {"message": "Task complete!", "title": "Thersites Alert"}
         })
         self.assertEqual(res["status"], "success")
