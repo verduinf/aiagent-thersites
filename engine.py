@@ -94,7 +94,8 @@ def extract_fuzzy_json(raw_text: str) -> Dict[str, Any]:
         data = valid_candidates[0]
         
     if not data:
-        raise ValueError("No valid contract JSON object found in response.")
+        # Graceful conversational fallback: treat plain conversational text as a final response with empty actions
+        return {"thought": "Direct conversational response.", "content": clean_text, "actions": []}
         
     thought = data.get("thought", "Processing...")
     content = data.get("content", "")
@@ -267,6 +268,18 @@ def dispatch_pushover_notification(message: str, title: str = "Thersites Agent",
     files = None
     file_handle = None
     if image_path:
+        if isinstance(image_path, str) and image_path.startswith(("http://", "https://")):
+            try:
+                log_subagent("Pushover", f"Auto-fetching image URL '{image_path}' for attachment...", INDICATOR_THINKING)
+                img_resp = requests.get(image_path, headers={"User-Agent": "Mozilla/5.0 AI-Agent-Thersites"}, timeout=15)
+                if img_resp.status_code == 200:
+                    local_img = SANDBOX_DIR / "photo.jpg"
+                    with open(local_img, "wb") as f:
+                        f.write(img_resp.content)
+                    image_path = str(local_img)
+            except Exception as dl_err:
+                log_subagent("Pushover", f"Image URL download failed: {dl_err}", INDICATOR_BLOCKED)
+                
         p = Path(image_path)
         if p.exists() and p.is_file():
             resolved_img = p
