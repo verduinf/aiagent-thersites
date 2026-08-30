@@ -91,23 +91,29 @@ document.addEventListener("DOMContentLoaded", () => {
             card.style.padding = "0.6rem 0.75rem";
             card.style.marginBottom = "0.6rem";
             card.style.fontSize = "0.8rem";
+            card.style.position = "relative";
 
             card.innerHTML = `
-                <div class="message-header" style="margin-bottom: 0.3rem;">
-                    <div class="message-author" style="font-size: 0.75rem;">
+                <div class="message-header" style="margin-bottom: 0.35rem; display: flex; justify-content: space-between; align-items: center;">
+                    <div class="message-author" style="font-size: 0.75rem; font-weight: 600; color: #fde047;">
                         <span>&#128205; Anchor (Msg #${m.sequence_id})</span>
                     </div>
-                    <button class="pin-btn pinned" data-msg-id="${m.id}" title="Unpin Anchor">&#128205;</button>
+                    <button class="unpin-sidebar-btn" data-msg-id="${m.id}" title="Unpin this anchor from context" style="cursor: pointer; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: #f87171; border-radius: 4px; padding: 2px 7px; font-size: 0.72rem; font-weight: 600; transition: all 0.2s; display: flex; align-items: center; gap: 4px;">
+                        <span>&#10005;</span> Unpin
+                    </button>
                 </div>
-                <div class="message-body" style="font-size: 0.8rem; line-height: 1.3;">${escapeHtml(m.content)}</div>
+                <div class="message-body" style="font-size: 0.8rem; line-height: 1.35; color: #e6edf3;">${escapeHtml(m.content)}</div>
             `;
             pinnedContainer.appendChild(card);
         });
 
-        pinnedContainer.querySelectorAll(".pin-btn").forEach(btn => {
+        pinnedContainer.querySelectorAll(".unpin-sidebar-btn").forEach(btn => {
             btn.addEventListener("click", async (e) => {
-                const msgId = e.target.getAttribute("data-msg-id");
-                await togglePin(msgId);
+                e.stopPropagation();
+                const msgId = btn.getAttribute("data-msg-id");
+                if (msgId) {
+                    await togglePin(msgId);
+                }
             });
         });
     }
@@ -175,17 +181,21 @@ document.addEventListener("DOMContentLoaded", () => {
 
         renderPinnedSidebar(pinnedMessages);
 
-        document.querySelectorAll(".pin-btn").forEach(btn => {
+        timelineContainer.querySelectorAll(".pin-btn").forEach(btn => {
             btn.addEventListener("click", async (e) => {
-                const msgId = e.target.getAttribute("data-msg-id");
-                await togglePin(msgId);
+                e.stopPropagation();
+                const msgId = btn.getAttribute("data-msg-id");
+                if (msgId) {
+                    await togglePin(msgId);
+                }
             });
         });
 
-        document.querySelectorAll(".delete-btn").forEach(btn => {
+        timelineContainer.querySelectorAll(".delete-btn").forEach(btn => {
             btn.addEventListener("click", async (e) => {
-                const msgId = e.target.getAttribute("data-msg-id");
-                if (confirm("Delete this message to free up context budget?")) {
+                e.stopPropagation();
+                const msgId = btn.getAttribute("data-msg-id");
+                if (msgId && confirm("Delete this message to free up context budget?")) {
                     await deleteMessage(msgId);
                 }
             });
