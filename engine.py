@@ -316,6 +316,15 @@ def execute_tool_call(action: Dict[str, Any]) -> Dict[str, Any]:
     try:
         if tool_name == "web_fetch":
             url = sanitized_params["url"]
+            # Smart URL alias mapping for dynamic SPA pages to rich RSS feeds
+            normalized_url = url.lower().rstrip("/")
+            if normalized_url in ("https://www.nu.nl/weer", "https://nu.nl/weer", "https://www.nu.nl/rss/weer", "https://nu.nl/rss/weer"):
+                url = "https://www.nu.nl/rss/weerbericht"
+            elif normalized_url in ("https://www.nu.nl/tech", "https://nu.nl/tech"):
+                url = "https://www.nu.nl/rss/Tech"
+            elif normalized_url in ("https://www.nu.nl/algemeen", "https://nu.nl/algemeen", "https://www.nu.nl", "https://nu.nl"):
+                url = "https://www.nu.nl/rss/Algemeen"
+                
             log_subagent("Web Fetcher", f"Fetching '{url}'...", INDICATOR_THINKING)
             resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"}, timeout=15)
             raw_html = resp.text
