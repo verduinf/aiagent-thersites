@@ -200,7 +200,7 @@ def query_ollama(messages: List[Dict[str, str]], model: str = MODEL_NAME, think_
         "options": {
             "num_ctx": dynamic_num_ctx,
             "num_thread": 8,
-            "temperature": 0.3
+            "temperature": AI_TEMPERATURE
         },
         "stream": False
     }
