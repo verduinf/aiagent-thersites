@@ -214,5 +214,74 @@ class TestThersitesSuite(unittest.TestCase):
         self.assertIsNone(notice_single)
 
 
+    @patch("requests.post")
+    @patch("requests.get")
+    def test_11_tado_client_token_caching_and_extraction(self, mock_get, mock_post):
+        import tado_client
+        tado_client.set_tado_credentials("test_user@example.com", "test_secret_pass")
+        
+        # 1. Mock OAuth Token Response (expires in 599s)
+        mock_post.return_value.status_code = 200
+        mock_post.return_value.json.return_value = {
+            "access_token": "mock_bearer_token_xyz123",
+            "token_type": "bearer",
+            "expires_in": 599
+        }
+        
+        # First token retrieval
+        tok1 = tado_client.get_valid_access_token()
+        self.assertEqual(tok1, "mock_bearer_token_xyz123")
+        self.assertEqual(mock_post.call_count, 1)
+        
+        # Second token retrieval within 10 minutes MUST use in-memory cache with ZERO network calls
+        tok2 = tado_client.get_valid_access_token()
+        self.assertEqual(tok2, "mock_bearer_token_xyz123")
+        self.assertEqual(mock_post.call_count, 1)  # Token was NOT requested in a loop!
+        
+        # 2. Mock /api/v2/me, /zones, and /zoneStates
+        def mock_get_router(url, *args, **kwargs):
+            m = MagicMock()
+            m.status_code = 200
+            if "api/v2/me" in url:
+                m.json.return_value = {"homeId": 12345}
+            elif "api/v2/homes/12345/zones" in url:
+                m.json.return_value = [
+                    {"id": 1, "name": "Living Room"},
+                    {"id": 2, "name": "Bedroom"}
+                ]
+            elif "api/v2/homes/12345/zoneStates" in url:
+                m.json.return_value = {
+                    "zoneStates": {
+                        "1": {
+                            "setting": {"power": "ON", "temperature": {"celsius": 20.0}},
+                            "sensorDataPoints": {
+                                "insideTemperature": {"celsius": 21.2},
+                                "humidity": {"percentage": 50.0}
+                            },
+                            "activityDataPoints": {"heatingPower": {"percentage": 0.0}}
+                        },
+                        "2": {
+                            "setting": {"power": "OFF"},
+                            "sensorDataPoints": {
+                                "insideTemperature": {"celsius": 18.5},
+                                "humidity": {"percentage": 55.0}
+                            }
+                        }
+                    }
+                }
+            return m
+            
+        mock_get.side_effect = mock_get_router
+        
+        # Run room temperature extraction
+        res = tado_client.get_room_temperatures()
+        self.assertEqual(res["status"], "success")
+        self.assertEqual(res["home_id"], 12345)
+        self.assertIn("Living Room", res["rooms"])
+        self.assertEqual(res["rooms"]["Living Room"]["current_temperature_celsius"], 21.2)
+        self.assertIn("21.2?C", res["summary_text"])
+        self.assertIn("Bedroom: 18.5?C", res["summary_text"])
+
+
 if __name__ == "__main__":
     unittest.main()

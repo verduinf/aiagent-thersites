@@ -21,6 +21,7 @@ from database import (
     get_pinned_messages, get_rolling_messages, add_message,
     add_scratch_message, execute_user_sql_query
 )
+import tado_client
 from warden import inspect_and_authorize, enforce_single_action_rule
 from console_logger import (
     log_main, log_subagent, log_telemetry, log_performance, log_verbose,
