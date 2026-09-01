@@ -22,7 +22,7 @@ def enforce_single_action_rule(actions: List[Dict[str, Any]]) -> Tuple[List[Dict
     if not actions or len(actions) <= 1:
         return actions, None
         
-    MEMORY_TOOLS = {"remember", "unremember", "list_internet_fav", "list_favorites"}
+    MEMORY_TOOLS = {"remember", "unremember", "forget", "list_internet_fav", "list_favorites"}
     PASSIVE_TOOLS = {"none", "finish", ""}
     
     external_actions = []
@@ -143,7 +143,7 @@ def validate_sql_query(query: str) -> Tuple[bool, str]:
     return False, "SQL mutations allowed ONLY on table 'thersites_scratchpad'."
 
 
-VALID_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tiff"}
+VALID_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tiff", ".ico"}
 
 def validate_image_path(filepath: str) -> Tuple[bool, str]:
     if not filepath or not isinstance(filepath, str):
@@ -234,11 +234,11 @@ def inspect_and_authorize(tool_name: str, params: Dict[str, Any]) -> Tuple[bool,
     elif tool_name in ("list_internet_fav", "list_favorites"):
         return True, "Listing bookmarked internet favorites authorized by The Warden.", params
 
-    elif tool_name == "unremember":
+    elif tool_name in ("unremember", "forget"):
         key = params.get("key", "")
         if not key:
-            return False, "Missing required 'key' parameter for unremember tool.", params
-        return True, f"Memory clue unremember '{key}' authorized.", params
+            return False, f"Missing required 'key' parameter for {tool_name} tool.", params
+        return True, f"Memory clue {tool_name} '{key}' authorized.", params
 
     elif tool_name in ("identify_image", "inspect_image", "gorgons_gaze", "analyze_image"):
         filepath = params.get("filepath", params.get("image_path", params.get("path", params.get("url", ""))))

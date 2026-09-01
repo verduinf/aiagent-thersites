@@ -67,7 +67,8 @@ body {
             }
         }
 
-        .perf-tag, .rolling-badge {
+        .perf-tag,
+        .rolling-badge {
             font-family: var(--font-code);
             font-size: 0.75rem;
             color: var(--text-muted);
@@ -245,7 +246,8 @@ body {
                 opacity: 0.5;
                 transition: opacity 0.2s;
 
-                &:hover, &.pinned {
+                &:hover,
+                &.pinned {
                     opacity: 1;
                 }
             }
@@ -273,6 +275,7 @@ body {
         color: #4ade80;
         border: 1px solid rgba(46, 160, 67, 0.4);
     }
+
     &.pinned {
         background-color: rgba(234, 179, 8, 0.15);
         color: #fde047;
@@ -356,8 +359,15 @@ body {
 }
 
 @keyframes bubblePop {
-    0% { transform: translateY(10px) scale(0.97); opacity: 0; }
-    100% { transform: translateY(0) scale(1); opacity: 1; }
+    0% {
+        transform: translateY(10px) scale(0.97);
+        opacity: 0;
+    }
+
+    100% {
+        transform: translateY(0) scale(1);
+        opacity: 1;
+    }
 }
 
 /* Form Area */
@@ -427,6 +437,7 @@ body {
     opacity: 0.4;
     transition: opacity 0.2s;
 }
+
 .delete-btn:hover {
     opacity: 1;
 }
@@ -578,4 +589,153 @@ body {
     border: 1px solid var(--border-color);
     margin-top: 8px;
     display: block;
+}
+
+/* Thinking Boost Toggle Switch */
+.toggle-control {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    user-select: none;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: rgba(22, 27, 34, 0.85);
+    border: 1px solid var(--border-color);
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+
+.toggle-control:hover {
+    border-color: var(--accent-cyan);
+    color: #e6edf3;
+}
+
+.toggle-control input[type="checkbox"] {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-slider {
+    position: relative;
+    display: inline-block;
+    width: 26px;
+    height: 14px;
+    background-color: #30363d;
+    border-radius: 14px;
+    transition: all 0.25s ease;
+}
+
+.toggle-slider::after {
+    content: "";
+    position: absolute;
+    height: 10px;
+    width: 10px;
+    left: 2px;
+    bottom: 2px;
+/* Thinking Tier Segmented Control */
+.think-tier-group {
+    display: inline-flex;
+    align-items: center;
+    background: rgba(22, 27, 34, 0.85);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 2px;
+    gap: 2px;
+    user-select: none;
+    transition: all 0.2s ease;
+}
+
+.think-tier-group:hover {
+    border-color: var(--border-hover, #484f58);
+}
+
+.think-tier-option {
+    cursor: pointer;
+    margin: 0;
+    position: relative;
+}
+
+.think-tier-option input[type="radio"] {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.think-tier-badge {
+    display: inline-block;
+    padding: 3px 8px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
+.think-tier-option:hover .think-tier-badge {
+    color: #e6edf3;
+}
+
+/* Off / Direct State */
+.think-tier-option input[type="radio"][value="off"]:checked + .think-tier-badge {
+    background: #30363d;
+    color: #f0f6fc;
+}
+
+/* Low / Fast CoT State */
+.think-tier-option input[type="radio"][value="low"]:checked + .think-tier-badge {
+    background: #1f6feb;
+    color: #ffffff;
+    box-shadow: 0 0 6px rgba(31, 111, 235, 0.4);
+}
+
+/* Deep CoT State */
+.think-tier-option input[type="radio"][value="deep"]:checked + .think-tier-badge {
+    background: #8957e5;
+    color: #ffffff;
+    box-shadow: 0 0 6px rgba(137, 87, 229, 0.4);
+}
+
+/* Model Selector Dropdown Control */
+.model-select-wrapper {
+    display: inline-flex;
+    align-items: center;
+    background: rgba(22, 27, 34, 0.85);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 2px 6px;
+    gap: 4px;
+    transition: all 0.2s ease;
+}
+
+.model-select-wrapper:hover {
+    border-color: var(--accent-cyan);
+}
+
+.model-select-icon {
+    font-size: 0.8rem;
+    opacity: 0.8;
+}
+
+.model-dropdown {
+    background: transparent;
+    color: #e6edf3;
+    border: none;
+    font-size: 0.75rem;
+    font-weight: 600;
+    font-family: var(--font-mono, monospace);
+    cursor: pointer;
+    outline: none;
+    padding: 2px 4px;
+}
+
+.model-dropdown option {
+    background: #161b22;
+    color: #e6edf3;
+    padding: 4px;
 }

@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from config import STATIC_DIR, SANDBOX_DIR, UPLOADS_DIR, MODEL_NAME
+from config import STATIC_DIR, SANDBOX_DIR, UPLOADS_DIR, MODEL_NAME, AVAILABLE_MODELS
 from database import (
     init_db, create_session, set_active_session, get_recent_sessions,
     get_or_create_active_session, add_message, toggle_message_pin,
@@ -84,6 +84,25 @@ async def read_index():
 async def favicon_endpoint():
     return Response(status_code=204)
 
+@app.get("/api/models")
+async def get_models():
+    # Reload dynamically in case config.json was edited live
+    import json
+    from config import CONFIG_JSON_PATH
+    models = list(AVAILABLE_MODELS)
+    default_m = MODEL_NAME
+    if CONFIG_JSON_PATH.exists():
+        try:
+            with open(CONFIG_JSON_PATH, "r", encoding="utf-8-sig") as f:
+                cdata = json.load(f)
+                if "AVAILABLE_MODELS" in cdata:
+                    models = cdata["AVAILABLE_MODELS"]
+                if "MODEL_NAME" in cdata:
+                    default_m = cdata["MODEL_NAME"]
+        except Exception:
+            pass
+    return {"models": models, "default": default_m}
+
 
 @app.post("/api/upload")
 async def upload_file(file: UploadFile = File(...)):
@@ -145,7 +164,7 @@ async def delete_message_endpoint(message_id: int):
     return {"status": "success", "message_id": message_id}
 
 @app.get("/api/chat/stream")
-async def stream_chat(prompt: str, session_id: Optional[str] = None, image_path: Optional[str] = None):
+async def stream_chat(prompt: str, session_id: Optional[str] = None, image_path: Optional[str] = None, think: Optional[str] = "off", model: Optional[str] = None):
     if not session_id:
         active_sess = get_or_create_active_session()
         session_id = active_sess["id"]
@@ -153,7 +172,7 @@ async def stream_chat(prompt: str, session_id: Optional[str] = None, image_path:
     set_active_session(session_id)
 
     async def event_generator():
-        generator = run_agent_inner_loop(session_id, prompt, image_path=image_path)
+        generator = run_agent_inner_loop(session_id, prompt, image_path=image_path, think_mode=think, model_name=model)
         for chunk in generator:
             yield f"data: {json.dumps(chunk)}\n\n"
             await asyncio.sleep(0.01)

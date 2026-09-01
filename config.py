@@ -35,8 +35,13 @@ if CONFIG_JSON_PATH.exists():
 
 OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", config_data.get("OLLAMA_BASE_URL", "http://localhost:11434"))
 MODEL_NAME = os.environ.get("MODEL_NAME", config_data.get("MODEL_NAME", "qwen3.5:9b"))
+AVAILABLE_MODELS = config_data.get("AVAILABLE_MODELS", [MODEL_NAME])
 KEEP_AI_ALIVE = os.environ.get("KEEP_AI_ALIVE", config_data.get("KEEP_AI_ALIVE", "5m"))
-NUM_CTX = int(os.environ.get("NUM_CTX", config_data.get("NUM_CTX", 2048)))
+NUM_CTX = int(os.environ.get("NUM_CTX", config_data.get("NUM_CTX", 16384)))
+NUM_GPU = int(os.environ.get("NUM_GPU", config_data.get("NUM_GPU", 58)))
+THINK_BUDGET_LOW = int(os.environ.get("THINK_BUDGET_LOW", config_data.get("THINK_BUDGET_LOW", 128)))
+THINK_BUDGET_DEEP = int(os.environ.get("THINK_BUDGET_DEEP", config_data.get("THINK_BUDGET_DEEP", 256)))
+DEFAULT_THINK_MODE = os.environ.get("DEFAULT_THINK_MODE", config_data.get("DEFAULT_THINK_MODE", "off"))
 ROLLING_BUFFER_CHAR_LIMIT = int(os.environ.get("ROLLING_BUFFER_CHAR_LIMIT", config_data.get("ROLLING_BUFFER_CHAR_LIMIT", 20000)))
 PINNED_CONTEXT_CHAR_LIMIT = int(os.environ.get("PINNED_CONTEXT_CHAR_LIMIT", config_data.get("PINNED_CONTEXT_CHAR_LIMIT", 5000)))
 MAX_INNER_LOOP_TURNS = int(os.environ.get("MAX_INNER_LOOP_TURNS", config_data.get("MAX_INNER_LOOP_TURNS", 8)))
@@ -45,9 +50,11 @@ URL_DOMAIN_BLACKLIST = config_data.get("URL_DOMAIN_BLACKLIST", ["localhost", "12
 PUSHOVER_USER_KEY = os.environ.get("PUSHOVER_USER_KEY", config_data.get("PUSHOVER_USER_KEY", ""))
 PUSHOVER_API_TOKEN = os.environ.get("PUSHOVER_API_TOKEN", os.environ.get("PUSHOVER_API", config_data.get("PUSHOVER_API_TOKEN", "")))
 PUSHOVER_EMAIL = os.environ.get("PUSHOVER_EMAIL", config_data.get("PUSHOVER_EMAIL", ""))
-VISION_MODEL_NAME = os.environ.get("VISION_MODEL_NAME", config_data.get("VISION_MODEL_NAME", "qwen2.5vl:7b"))
-VISION_NUM_CTX = int(os.environ.get("VISION_NUM_CTX", config_data.get("VISION_NUM_CTX", 2048)))
-
+VISION_MODEL_NAME = os.environ.get("VISION_MODEL_NAME", config_data.get("VISION_MODEL_NAME", "qwen3.5:9b"))
+VISION_NUM_CTX = int(os.environ.get("VISION_NUM_CTX", config_data.get("VISION_NUM_CTX", 16384)))
+WEB_USER_AGENT = os.environ.get("WEB_USER_AGENT", config_data.get("WEB_USER_AGENT", "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"))
+TOOL_RESULT_CHAR_LIMIT = int(os.environ.get("TOOL_RESULT_CHAR_LIMIT", config_data.get("TOOL_RESULT_CHAR_LIMIT", 16384)))
+WEB_FETCH_CHAR_LIMIT = int(os.environ.get("WEB_FETCH_CHAR_LIMIT", config_data.get("WEB_FETCH_CHAR_LIMIT", 16384)))
 
 VERBOSE = "--verbose" in sys.argv or os.environ.get("VERBOSE") == "1" or config_data.get("VERBOSE", False)
 

@@ -16,10 +16,12 @@ import base64
 import xml.etree.ElementTree as ET
 from typing import Optional
 from config import (
-    OLLAMA_BASE_URL, MODEL_NAME, VISION_MODEL_NAME, VISION_NUM_CTX, KEEP_AI_ALIVE, NUM_CTX,
+    OLLAMA_BASE_URL, MODEL_NAME, VISION_MODEL_NAME, VISION_NUM_CTX, KEEP_AI_ALIVE, NUM_CTX, NUM_GPU,
+    THINK_BUDGET_LOW, THINK_BUDGET_DEEP, DEFAULT_THINK_MODE,
     ROLLING_BUFFER_CHAR_LIMIT, PINNED_CONTEXT_CHAR_LIMIT,
     MAX_INNER_LOOP_TURNS, AI_TEMPERATURE, SCRATCHPAD_PATH, SANDBOX_DIR, UPLOADS_DIR, VERBOSE,
-    PUSHOVER_USER_KEY, PUSHOVER_API_TOKEN
+    PUSHOVER_USER_KEY, PUSHOVER_API_TOKEN, WEB_USER_AGENT,
+    TOOL_RESULT_CHAR_LIMIT, WEB_FETCH_CHAR_LIMIT
 )
 from database import (
     get_pinned_messages, get_rolling_messages, add_message,
@@ -38,7 +40,7 @@ The Boss's console ONLY receives and renders your output when packaged in this e
 Always package your thoughts, replies, and actions in this JSON structure for EVERY turn:
 
 {{
-  "thought": "<internal junior dev reasoning>",
+  "thought": "<internal junior AI assistant reasoning>",
   "content": "<message to The Boss>",
   "actions": [
     {{
@@ -51,38 +53,35 @@ Always package your thoughts, replies, and actions in this JSON structure for EV
 
 Available Tools:
 - `remember`: {{"type": "memory", "key": "...", "clue": "..."}} OR {{"type": "url_fav", "key": "...", "clue": "https://..."}} (Saves a personal clue or bookmarked web/RSS feed into your SQLite Paycheck Capsule.)
-- `unremember`: {{"key": "..."}} (Deletes a clue from your Paycheck Capsule.)
+- `forget`: {{"key": "..."}} (Deletes a clue from your Paycheck Capsule.)
 - `list_internet_fav`: {{}} (Retrieves all bookmarked favorite web/RSS feeds from your SQLite capsule.)
-- `get_room_temperatures`: {{}} (Fetches live inside temperatures, target settings, and humidity from The Boss's Tado system.)
-- `web_fetch`: {{"url": "https://..."}} (Fetches text from HTML web pages and RSS feeds. DO NOT use for direct image files.)
+- `get_room_temperatures`: {{}} (Fetches live inside temperatures, target settings, and humidity from The Boss's house.)
+- `web_fetch`: {{"url": "https://..."}} (Fetches text from web pages and RSS feeds.)
 - `download_image`: {{"url": "https://...", "filepath": "sandbox/photo.jpg"}} (Downloads binary web image URLs to sandbox.)
-- `identify_image`: {{"filepath": "sandbox/photo.jpg"}} (Visually inspects and describes an image in your sandbox or via image URL.)
+- `identify_image`: {{"filepath": "sandbox/photo.jpg" or "https://..."}} (Visually inspects and describes a local image using filepath or an internet image using a direct URL.)
 - `send_message`: {{"message": "...", "title": "Thersites Alert", "image_path": "sandbox/photo.jpg"}} (Sends a real-time push alert to The Boss's mobile device via Pushover.)
-- `write_to_file`: {{"filepath": "sandbox/file.txt", "content": "..."}} (Writes text files in sandbox.)
+- `write_to_file`: {{"filepath": "sandbox/file.txt", "content": "..."}} (Writes text files to sandbox.)
 - `read_file`: {{"filepath": "sandbox/file.txt"}}
 - `delete_file`: {{"filepath": "sandbox/file.txt"}}
 - `list_sandbox`: {{"dirpath": "sandbox"}}
 - `sql_query`: {{"query": "SELECT ..."}}
 
-Execution Invariants (Enforced by The Warden):
-1. SINGLE ACTION PACING: Emit at most ONE external I/O action plus optionally ONE internal memory action (remember/unremember) per turn.
-2. NO REDUNDANT TOOL LOOPS: Once you receive a successful `[TOOL RESULT '<tool_name>']`, DO NOT execute that same tool again! Your observation is already in front of you. Formulate your answer to The Boss in `content` and set `"actions": []`.
-3. IMAGE WORKFLOW: To analyze an image URL or photo, download it to `sandbox/` with `download_image` on Turn 1. Once downloaded, call `identify_image` on Turn 2. When the analysis returns, formulate your final response and set `"actions": []`.
-4. DELIBERATE BEFORE ANSWERING: Always write 1-2 thoughtful sentences in "thought" before formulating "content" or "actions".
-5. COMPLETION: When your task is finished or responding conversationally, set `"actions": []`.
+Execution Guidelines (Enforced by The Warden):
+1. SINGLE ACTION PACING: Emit at most ONE external tool action (plus optionally ONE memory action) per turn.
+2. PLAN & WALK: For multi-step tasks, outline a concise step plan and keep this plan in JSON field `thought` (e.g. `Plan: 1. Action A -> 2. Check outcome of A and Do Action B -> ... -> Final: Report to The Boss, set actions: []`). On each turn, review your scratch history, walk the plan (or adapt based on outcomes), and only set `"actions": []` on the Final step.
+3. CONVERSATIONAL COMPLETION: Only when you are answering direct simple chat or once your plan is finished, set `"actions": []`.
 
-Canonical JSON Schema Example:
+Canonical Multi-Turn Example:
 
-User: "What are the temperatures in my rooms right now?"
-Assistant:
+Turn 1:
 {{
-  "thought": "The Boss is asking for room temperatures. I will use get_room_temperatures to fetch live readings from his Tado system.",
-  "content": "Checking your room temperatures right away, Boss!",
+  "thought": "The Boss wants to know if there's a picture in an article and what it shows. Plan: 1. web_fetch article -> 2. Check article for photo & call identify_image -> Final: Report story summary & photo description to The Boss, set actions: [].",
+  "content": "Checking the article and looking for photos now, Boss!",
   "actions": [
     {{
       "id": "act_1",
-      "tool": "get_room_temperatures",
-      "params": {{}}
+      "tool": "web_fetch",
+      "params": {{"url": "https://nu.nl/..."}}
     }}
   ]
 }}
@@ -200,11 +199,12 @@ def extract_structured_feed(raw_text: str, max_items: int = 15) -> Optional[str]
             pass
     return None
 
-def clean_html_to_text(html_content: str, max_chars: int = 4000) -> str:
+def clean_html_to_text(html_content: str, max_chars: Optional[int] = None) -> str:
     """Robust HTML and RSS feed stripper prioritizing structured feed items or <main> / <article> blocks."""
+    limit = max_chars if max_chars is not None else WEB_FETCH_CHAR_LIMIT
     feed_text = extract_structured_feed(html_content, max_items=15)
     if feed_text:
-        return feed_text[:max_chars]
+        return feed_text[:limit]
         
     text = re.sub(r'<script[^>]*>.*?</script>', '', html_content, flags=re.DOTALL | re.IGNORECASE)
     text = re.sub(r'<style[^>]*>.*?</style>', '', text, flags=re.DOTALL | re.IGNORECASE)
@@ -279,13 +279,36 @@ def prewarm_ollama_model(think_mode: bool = False) -> bool:
 
 
 def encode_image_to_base64(filepath: str) -> str:
-    with open(filepath, "rb") as f:
-        return base64.b64encode(f.read()).decode("utf-8")
+    try:
+        from PIL import Image
+        import io
+        p = Path(filepath)
+        suffix = p.suffix.lower()
+        with Image.open(filepath) as img:
+            # Handle alpha transparency vs standard RGB
+            if suffix == ".ico":
+                buf = io.BytesIO()
+                img.convert("RGBA").save(buf, format="PNG")
+                return base64.b64encode(buf.getvalue()).decode("utf-8")
+            
+            # Universal normalization for WEBP, BMP, TIFF, and large JPEG/PNG images
+            img_rgb = img.convert("RGB")
+            # Scale down oversized images to max 1024px to keep token counts lean and prevent VRAM exhaustion
+            if max(img_rgb.size) > 1024:
+                img_rgb.thumbnail((1024, 1024), Image.Resampling.LANCZOS)
+            
+            buf = io.BytesIO()
+            img_rgb.save(buf, format="JPEG", quality=90)
+            return base64.b64encode(buf.getvalue()).decode("utf-8")
+    except Exception:
+        with open(filepath, "rb") as f:
+            return base64.b64encode(f.read()).decode("utf-8")
 
-def query_ollama_vision(image_path: str, prompt: str = "Describe what is shown in this image.") -> Tuple[str, Dict[str, Any]]:
+def query_ollama_vision(image_path: str, prompt: str = "Describe what is shown in this image.", model: Optional[str] = None) -> Tuple[str, Dict[str, Any]]:
     """
-    Queries Ollama vision model (qwen2.5vl:7b) with image base64 and logs swap/inference telemetry.
+    Queries Ollama vision model with image base64 and logs swap/inference telemetry.
     """
+    effective_model = model or VISION_MODEL_NAME
     t0 = time.time()
     p = Path(image_path).resolve()
     if not p.exists():
@@ -299,7 +322,7 @@ def query_ollama_vision(image_path: str, prompt: str = "Describe what is shown i
     img_b64 = encode_image_to_base64(str(p))
     
     payload = {
-        "model": VISION_MODEL_NAME,
+        "model": effective_model,
         "messages": [
             {
                 "role": "user",
@@ -308,15 +331,18 @@ def query_ollama_vision(image_path: str, prompt: str = "Describe what is shown i
             }
         ],
         "stream": False,
+        "think": False,
         "options": {
             "num_ctx": VISION_NUM_CTX,
+            "num_gpu": NUM_GPU,
+            "num_predict": 384,
             "temperature": 0.2
         },
         "keep_alive": KEEP_AI_ALIVE
     }
     
     url = f"{OLLAMA_BASE_URL.rstrip('/')}/api/chat"
-    resp = _OLLAMA_SESSION.post(url, json=payload, timeout=60)
+    resp = _OLLAMA_SESSION.post(url, json=payload, timeout=300)
     if resp.status_code != 200:
         raise RuntimeError(f"Ollama Vision API error ({resp.status_code}): {resp.text}")
         
@@ -336,33 +362,61 @@ def query_ollama_vision(image_path: str, prompt: str = "Describe what is shown i
         "tok_per_sec": round(tok_per_sec, 1)
     }
     
-    log_subagent("Vision Inspection", f"Model '{VISION_MODEL_NAME}' load/swap: {perf['load_latency']}s | Inference: {perf['total_latency'] - perf['load_latency']:.2f}s ({perf['tok_per_sec']} tok/s)", INDICATOR_DONE)
+    log_subagent("Vision Inspection", f"Model '{effective_model}' load/swap: {perf['load_latency']}s | Inference: {perf['total_latency'] - perf['load_latency']:.2f}s ({perf['tok_per_sec']} tok/s)", INDICATOR_DONE)
     return content, perf
 
-def query_ollama(messages: List[Dict[str, str]], model: str = MODEL_NAME, think_mode: bool = False) -> Tuple[str, Dict[str, Any]]:
+def query_ollama(messages: List[Dict[str, str]], model: str = MODEL_NAME, think_mode: Any = DEFAULT_THINK_MODE) -> Tuple[str, Dict[str, Any]]:
     base = OLLAMA_BASE_URL.rstrip('/')
     native_url = f"{base}/api/chat"
     headers = {"Content-Type": "application/json"}
     
+    # Normalize think_mode
+    if isinstance(think_mode, bool):
+        mode_str = "deep" if think_mode else "off"
+    else:
+        mode_str = str(think_mode or DEFAULT_THINK_MODE).lower().strip()
+        if mode_str not in ("off", "low", "deep"):
+            mode_str = "off"
+            
+    is_granite = "granite" in model.lower()
+    
     total_chars = sum(len(m.get("content", "")) for m in messages)
     # Ultra-lean dynamic context scaling: lean 2048 baseline, expanding dynamically with prompt + 1024 headroom
     estimated_prompt_tokens = int(total_chars / 3.2) + 200
-    dynamic_num_ctx = max(2048, estimated_prompt_tokens + 1024)
+    dynamic_num_ctx = min(NUM_CTX, max(2048, estimated_prompt_tokens + 1024))
+    
+    # Configure reasoning effort and predict tokens based on thinking tier
+    if mode_str == "off":
+        think_val = False
+        reasoning_effort = "none"
+        predict_budget = 512
+    elif mode_str == "low":
+        think_val = "low" if is_granite else True
+        reasoning_effort = "low"
+        predict_budget = 384 + THINK_BUDGET_LOW
+    else: # deep
+        think_val = True
+        reasoning_effort = "high"
+        predict_budget = 768 + THINK_BUDGET_DEEP
     
     payload = {
         "model": model,
         "messages": messages,
         "format": "json",
         "keep_alive": KEEP_AI_ALIVE,
-        "think": think_mode,
+        "think": think_val,
         "options": {
             "num_ctx": dynamic_num_ctx,
-            "num_predict": 1024,
+            "num_gpu": NUM_GPU,
+            "num_predict": predict_budget,
             "num_thread": 8,
             "temperature": AI_TEMPERATURE
         },
         "stream": False
     }
+    
+    if is_granite:
+        payload["options"]["reasoning_effort"] = reasoning_effort
     
     start_t = time.time()
     perf_metrics = {
@@ -373,7 +427,7 @@ def query_ollama(messages: List[Dict[str, str]], model: str = MODEL_NAME, think_
     }
     
     try:
-        response = requests.post(native_url, headers=headers, json=payload, timeout=120)
+        response = requests.post(native_url, headers=headers, json=payload, timeout=300)
         wall_time = time.time() - start_t
         if response.status_code == 200:
             data = response.json()
@@ -432,7 +486,7 @@ def dispatch_pushover_notification(message: str, title: str = "Thersites Agent",
         if isinstance(image_path, str) and image_path.startswith(("http://", "https://")):
             try:
                 log_subagent("Pushover", f"Auto-fetching image URL '{image_path}' for attachment...", INDICATOR_THINKING)
-                img_resp = requests.get(image_path, headers={"User-Agent": "Mozilla/5.0 AI-Agent-Thersites"}, timeout=15)
+                img_resp = requests.get(image_path, headers={"User-Agent": WEB_USER_AGENT}, timeout=15)
                 if img_resp.status_code == 200:
                     local_img = SANDBOX_DIR / "photo.jpg"
                     with open(local_img, "wb") as f:
@@ -478,7 +532,7 @@ def dispatch_pushover_notification(message: str, title: str = "Thersites Agent",
         log_subagent("Pushover", err_msg, INDICATOR_BLOCKED)
         return False, err_msg
 
-def execute_tool_call(action: Dict[str, Any]) -> Dict[str, Any]:
+def execute_tool_call(action: Dict[str, Any], active_model: Optional[str] = None) -> Dict[str, Any]:
     tool_name = action.get("tool", action.get("name", "none"))
     params = action.get("params", {})
     action_id = action.get("id", "act_1")
@@ -525,7 +579,7 @@ def execute_tool_call(action: Dict[str, Any]) -> Dict[str, Any]:
                 url = "https://www.duic.nl/rss/"
                 
             log_subagent("Web Fetcher", f"Fetching '{url}'...", INDICATOR_THINKING)
-            resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AI-Agent-Thersites"}, timeout=15)
+            resp = requests.get(url, headers={"User-Agent": WEB_USER_AGENT}, timeout=15)
             content_type = resp.headers.get("Content-Type", "").lower()
             if content_type.startswith("image/"):
                 return {
@@ -535,7 +589,7 @@ def execute_tool_call(action: Dict[str, Any]) -> Dict[str, Any]:
                     "result": f"[DIRECT IMAGE CONTENT DETECTED]: '{url}' returned an image ({content_type}). Use 'download_image' or 'identify_image' to inspect this image."
                 }
             raw_html = resp.text
-            clean_text = clean_html_to_text(raw_html, max_chars=4000)
+            clean_text = clean_html_to_text(raw_html, max_chars=WEB_FETCH_CHAR_LIMIT)
             log_subagent("Web Fetcher", f"Extracted {len(clean_text)} chars of text with article URLs in 0.01s", INDICATOR_DONE)
             return {"id": action_id, "tool": tool_name, "status": "success", "result": clean_text}
             
@@ -552,7 +606,7 @@ def execute_tool_call(action: Dict[str, Any]) -> Dict[str, Any]:
                     fname = f"{fname}.jpg"
                 local_path = SANDBOX_DIR / fname
                 log_subagent("Image Downloader", f"Auto-fetching image URL '{url}' to '{local_path.name}'...", INDICATOR_THINKING)
-                resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AI-Agent-Thersites"}, timeout=15)
+                resp = requests.get(url, headers={"User-Agent": WEB_USER_AGENT}, timeout=15)
                 if resp.status_code == 200:
                     with open(local_path, "wb") as f:
                         f.write(resp.content)
@@ -573,8 +627,9 @@ def execute_tool_call(action: Dict[str, Any]) -> Dict[str, Any]:
                 elif (SANDBOX_DIR / filepath).exists():
                     filepath = str((SANDBOX_DIR / filepath).resolve())
                     
-            log_subagent("Vision Inspection", f"Inspecting visual asset '{Path(filepath).name}' with {VISION_MODEL_NAME}...", INDICATOR_THINKING)
-            description, v_perf = query_ollama_vision(filepath, prompt)
+            effective_vis_model = active_model or VISION_MODEL_NAME
+            log_subagent("Vision Inspection", f"Inspecting visual asset '{Path(filepath).name}' with {effective_vis_model}...", INDICATOR_THINKING)
+            description, v_perf = query_ollama_vision(filepath, prompt, model=effective_vis_model)
             return {
                 "id": action_id,
                 "tool": tool_name,
@@ -593,7 +648,7 @@ def execute_tool_call(action: Dict[str, Any]) -> Dict[str, Any]:
                 else:
                     filepath = str((SANDBOX_DIR / p.name).resolve())
             log_subagent("Image Downloader", f"Fetching image '{url}'...", INDICATOR_THINKING)
-            resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AI-Agent-Thersites"}, timeout=15)
+            resp = requests.get(url, headers={"User-Agent": WEB_USER_AGENT}, timeout=15)
             if resp.status_code == 200:
                 with open(filepath, "wb") as f:
                     f.write(resp.content)
@@ -646,7 +701,7 @@ def execute_tool_call(action: Dict[str, Any]) -> Dict[str, Any]:
             log_subagent("Memory Capsule", f"Saved [{res['type']}] '{res['key']}': '{res['value']}'", INDICATOR_DONE)
             return {"id": action_id, "tool": tool_name, "status": "success", "result": f"Clue saved to Paycheck Capsule [{res['type']}]: [{res['key']}] -> {res['value']}"}
 
-        elif tool_name == "unremember":
+        elif tool_name in ("unremember", "forget"):
             key = sanitized_params.get("key", "")
             from database import delete_clue
             deleted = delete_clue(key)
@@ -686,14 +741,15 @@ def execute_tool_call(action: Dict[str, Any]) -> Dict[str, Any]:
     except Exception as e:
         return {"id": action_id, "tool": tool_name, "status": "error", "result": f"Execution error: {str(e)}"}
 
-def run_agent_inner_loop(session_id: str, user_prompt: str, image_path: Optional[str] = None, think_mode: bool = False) -> Generator[Dict[str, Any], None, str]:
-    log_main(f"Starting Inner Loop for session '{session_id}' prompt: '{user_prompt[:50]}...'", INDICATOR_THINKING)
+def run_agent_inner_loop(session_id: str, user_prompt: str, image_path: Optional[str] = None, think_mode: Any = DEFAULT_THINK_MODE, model_name: Optional[str] = None) -> Generator[Dict[str, Any], None, str]:
+    effective_model = model_name or MODEL_NAME
+    log_main(f"Starting Inner Loop for session '{session_id}' model: '{effective_model}' think: '{think_mode}' prompt: '{user_prompt[:50]}...'", INDICATOR_THINKING)
     
     effective_prompt = user_prompt
     if image_path and os.path.exists(image_path):
-        log_main(f"Visual asset attached: '{Path(image_path).name}'. Inspecting image...", INDICATOR_THINKING)
+        log_main(f"Visual asset attached: '{Path(image_path).name}'. Inspecting image with {effective_model}...", INDICATOR_THINKING)
         try:
-            vis_desc, v_perf = query_ollama_vision(image_path, user_prompt)
+            vis_desc, v_perf = query_ollama_vision(image_path, user_prompt, model=effective_model)
             effective_prompt = f"[ATTACHED IMAGE: {Path(image_path).name} (Visually Inspected)]:\n{vis_desc}\n\nUser Request: {user_prompt}"
             yield {
                 "type": "scratch_step",
@@ -747,7 +803,7 @@ def run_agent_inner_loop(session_id: str, user_prompt: str, image_path: Optional
             if s.get("warden_notice"):
                 llm_messages.append({"role": "user", "content": s["warden_notice"]})
             if s.get("results"):
-                res_summary = "\n".join([f"[TOOL RESULT '{r.get('tool')}']: {str(r.get('result'))[:4000]}" for r in s["results"]])
+                res_summary = "\n".join([f"[TOOL RESULT '{r.get('tool')}']: {str(r.get('result'))[:TOOL_RESULT_CHAR_LIMIT]}" for r in s["results"]])
                 llm_messages.append({"role": "user", "content": res_summary})
             elif s.get("error"):
                 llm_messages.append({"role": "user", "content": f"[SYSTEM ERROR]: {s['error']}"})
@@ -769,10 +825,10 @@ def run_agent_inner_loop(session_id: str, user_prompt: str, image_path: Optional
         }
         
         try:
-            raw_output, perf = query_ollama(llm_messages)
+            raw_output, perf = query_ollama(llm_messages, model=effective_model, think_mode=think_mode)
         except Exception as query_err:
             log_main(f"Ollama Connection Error: {query_err}", INDICATOR_BLOCKED)
-            err_msg = f"[OLLAMA ERROR]: Local model 'qwen3.5:9b' is offline or unreachable ({str(query_err)})."
+            err_msg = f"[OLLAMA ERROR]: Local model '{effective_model}' is offline or unreachable ({str(query_err)})."
             add_scratch_message(session_id, turn, "ollama_error", err_msg)
             is_error_response = True
             final_response = err_msg
@@ -849,7 +905,7 @@ def run_agent_inner_loop(session_id: str, user_prompt: str, image_path: Optional
                         "result": f"[WARDEN ADVISORY]: Query '{tool_name}' was already executed and results are in your conversation history. Do not repeat this tool call. Formulate your answer to The Boss in 'content' and set actions: []."
                     }
                 else:
-                    res = execute_tool_call(act)
+                    res = execute_tool_call(act, active_model=effective_model)
                     executed_tools_in_loop.add(tool_name)
                     
                 action_results.append(res)
@@ -894,5 +950,7 @@ def run_agent_inner_loop(session_id: str, user_prompt: str, image_path: Optional
             "type": "final_response",
             "message": {"id": -1, "sequence_id": -1, "role": "assistant", "content": final_response, "created_at": "now"}
         }
+        
+    return final_response
         
     return final_response

@@ -1,24 +1,29 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Local Intern Thersites - Local Console</title>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>&#128481;&#65039;</text></svg>">
-    <link rel="stylesheet" href="/static/style.css?v=15">
+    <link rel="icon"
+        href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>&#128481;&#65039;</text></svg>">
+    <link rel="stylesheet" href="/static/style.css?v=22">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2&bull;family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2&bull;family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+        rel="stylesheet">
 </head>
+
 <body>
     <div class="app-container">
         <header class="app-header">
             <div class="header-left">
                 <div class="status-indicator">
                     <span class="status-dot"></span>
-                    <span class="status-text">qwen3.5:9b</span>
+                    <span class="status-text" id="modelStatusText">qwen3.5:9b</span>
                 </div>
-                <div class="perf-tag" id="perfTag">&bull; -- tok/s</div>
+                <div class="perf-tag" id="perfTag">⚡ -- tok/s</div>
                 <div class="rolling-badge" id="rollingBadge">Rolling: 0 / 20k</div>
             </div>
             <div class="header-right">
@@ -54,7 +59,7 @@
                 <div class="timeline-header">
                     <h2>&#128220; Conversation Timeline (Full History from Msg #1)</h2>
                 </div>
-                
+
                 <div class="timeline-container" id="timelineContainer">
                     <!-- Dynamic Messages Loaded Here -->
                 </div>
@@ -72,9 +77,29 @@
                 <div class="image-preview-tray" id="imagePreviewTray" style="display:none;"></div>
                 <form class="chat-input-form" id="chatForm">
                     <input type="file" id="imageInput" accept="image/*" style="display:none;">
-                    <textarea id="promptInput" placeholder="Give Thersites an instruction (or attach an image)..." rows="2"></textarea>
+                    <textarea id="promptInput" placeholder="Give Thersites an instruction (or attach an image)..."
+                        rows="2"></textarea>
                     <div class="chat-form-actions">
-                        <button type="button" id="attachBtn" class="btn btn-secondary" title="Attach Image">&#128065;&#65039; Attach</button>
+                        <div class="model-select-wrapper" title="Select Active Reasoning Model">
+                            <span class="model-select-icon">&#9881;&#65039;</span>
+                            <select id="modelSelect" class="model-dropdown"></select>
+                        </div>
+                        <div class="think-tier-group" id="thinkTierGroup" title="Reasoning & Thinking Budget">
+                            <label class="think-tier-option" title="Direct response (0s CoT overhead)">
+                                <input type="radio" name="thinkMode" value="off" checked>
+                                <span class="think-tier-badge">⚪ Direct</span>
+                            </label>
+                            <label class="think-tier-option" title="Fast CoT: 128-token budget (~7s)">
+                                <input type="radio" name="thinkMode" value="low">
+                                <span class="think-tier-badge">⚡ Fast</span>
+                            </label>
+                            <label class="think-tier-option" title="Deep CoT: 256-token budget (~15s)">
+                                <input type="radio" name="thinkMode" value="deep">
+                                <span class="think-tier-badge">🧠 Deep</span>
+                            </label>
+                        </div>
+                        <button type="button" id="attachBtn" class="btn btn-secondary"
+                            title="Attach Image">&#128065;&#65039; Attach</button>
                         <button type="submit" id="sendBtn" class="btn btn-primary">Send &#128640;</button>
                     </div>
                 </form>
@@ -82,6 +107,7 @@
         </div>
     </div>
 
-    <script src="/static/app.js?v=16"></script>
+    <script src="/static/app.js?v=22"></script>
 </body>
+
 </html>

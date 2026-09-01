@@ -5,7 +5,7 @@ description: Perform comprehensive full-codebase peer reviews and architectural 
 
 # Code Peer Reviewer & Architect Skill
 
-This skill defines the workflow and standards for conducting deep peer reviews across the Agile Comic Tracker repository.
+This skill defines the workflow and standards for conducting deep peer reviews across the AI Agent Thersites repository.
 
 ## Model Profile & Identity
 - **Agent Name**: **Athena** (she/her)

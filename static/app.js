@@ -15,11 +15,49 @@ document.addEventListener("DOMContentLoaded", () => {
     const attachBtn = document.getElementById("attachBtn");
     const imageInput = document.getElementById("imageInput");
     const imagePreviewTray = document.getElementById("imagePreviewTray");
+    const thinkToggle = document.getElementById("thinkToggle");
+    const modelSelect = document.getElementById("modelSelect");
+    const modelStatusText = document.getElementById("modelStatusText");
 
     let currentSessionId = null;
     let attachedImage = null;
 
+    async function loadModels() {
+        try {
+            const res = await fetch("/api/models");
+            const data = await res.json();
+            const models = data.models || ["qwen3.5:9b"];
+            const defaultModel = data.default || "qwen3.5:9b";
+
+            if (modelSelect) {
+                modelSelect.innerHTML = "";
+                models.forEach(m => {
+                    const opt = document.createElement("option");
+                    opt.value = m;
+                    opt.textContent = m;
+                    if (m === defaultModel) {
+                        opt.selected = true;
+                    }
+                    modelSelect.appendChild(opt);
+                });
+
+                if (modelStatusText) {
+                    modelStatusText.textContent = modelSelect.value;
+                }
+
+                modelSelect.addEventListener("change", () => {
+                    if (modelStatusText) {
+                        modelStatusText.textContent = modelSelect.value;
+                    }
+                });
+            }
+        } catch (e) {
+            console.error("Failed to load models list", e);
+        }
+    }
+
     async function initApp() {
+        await loadModels();
         await loadSessions();
         if (currentSessionId) {
             await loadMessages(currentSessionId);
@@ -142,14 +180,14 @@ document.addEventListener("DOMContentLoaded", () => {
         messages.forEach(m => {
             const card = document.createElement("div");
             card.className = `message-card ${m.role === 'user' ? 'role-user' : 'role-assistant'}`;
-            
+
             const isUser = m.role === 'user';
             const author = isUser ? "The Boss" : "Thersites (Intern)";
             const avatarIcon = isUser ? "&#128104;" : '<img src="/static/images/thersites.png" class="msg-avatar-thumb" alt="Thersites">';
-            
+
             const isPinned = m.is_pinned === 1;
             const pinClass = isPinned ? "pinned" : "";
-            
+
             let statusTagHtml = "";
             if (isPinned) {
                 statusTagHtml = `<span class="context-badge pinned" title="Pinned Anchor in System Contract">&#128205; Pinned Anchor</span>`;
@@ -210,7 +248,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }, 50);
     }
 
-    
+
     async function deleteMessage(msgId) {
         try {
             await fetch(`/api/messages/${msgId}`, { method: "DELETE" });
@@ -243,7 +281,7 @@ document.addEventListener("DOMContentLoaded", () => {
         pinnedBadge.textContent = "Pinned: 0 / 5k";
     }
 
-    
+
     if (attachBtn && imageInput) {
         attachBtn.addEventListener("click", () => imageInput.click());
 
@@ -304,15 +342,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const card = document.createElement("div");
         card.className = "message-card role-user optimistic-user-card";
-        
+
         let imgHtml = "";
         if (attachedImg) {
             imgHtml = `<div class="msg-image-attachment" style="margin-bottom: 8px;"><img src="${attachedImg.url}" alt="Attachment" style="max-width: 220px; max-height: 180px; border-radius: 8px; border: 1px solid var(--accent-cyan); display: block;"></div>`;
         }
-        
+
         const now = new Date();
         const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-        
+
         card.innerHTML = `
             <div class="message-header">
                 <div class="message-author">
@@ -327,7 +365,7 @@ document.addEventListener("DOMContentLoaded", () => {
             </div>
             <div class="message-body">${imgHtml}${escapeHtml(promptText)}</div>
         `;
-        
+
         timelineContainer.appendChild(card);
         card.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
@@ -344,7 +382,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         promptInput.value = "";
         sendBtn.disabled = true;
-        
+
         scratchpadAccordion.classList.add("visible");
         scratchpadAccordion.classList.remove("collapsed");
         accordionHeader.innerHTML = `<span class="accordion-title">&#128993; Intern is thinking... (Turn 1/8)</span><span class="accordion-icon">&#9650;</span>`;
@@ -353,7 +391,10 @@ document.addEventListener("DOMContentLoaded", () => {
         let lastTurn = 1;
 
         try {
-            let streamUrl = `/api/chat/stream?session_id=${currentSessionId}&prompt=${encodeURIComponent(prompt)}`;
+            const selectedThinkRadio = document.querySelector("input[name='thinkMode']:checked");
+            const selectedThink = selectedThinkRadio ? selectedThinkRadio.value : "off";
+            const selectedModel = modelSelect ? modelSelect.value : "qwen3.5:9b";
+            let streamUrl = `/api/chat/stream?session_id=${currentSessionId}&prompt=${encodeURIComponent(prompt)}&think=${encodeURIComponent(selectedThink)}&model=${encodeURIComponent(selectedModel)}`;
             if (attachedImage) {
                 streamUrl += `&image_path=${encodeURIComponent(attachedImage.filepath)}`;
             }
@@ -372,12 +413,12 @@ document.addEventListener("DOMContentLoaded", () => {
                     accordionHeader.innerHTML = `<span class="accordion-title">&#128993; Intern is thinking... (Turn ${data.turn}/${data.max_turns})</span><span class="accordion-icon">${icon}</span>`;
                 } else if (data.type === "performance") {
                     if (perfTag) {
-                        perfTag.textContent = `&#9889; ${data.tok_per_sec} tok/s (${data.latency_sec}s)`;
+                        perfTag.textContent = `⚡ ${data.tok_per_sec} tok/s (${data.latency_sec}s)`;
                     }
                 } else if (data.type === "scratch_step") {
                     const stepDiv = document.createElement("div");
                     stepDiv.className = "accordion-step";
-                    
+
                     if (data.status === "error") {
                         stepDiv.innerHTML = `<span class="step-icon">&#128308;</span> [Turn ${data.turn}] Details: ${escapeHtml(data.details)}`;
                     } else {

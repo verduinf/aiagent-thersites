@@ -1,8 +1,18 @@
 {
   "OLLAMA_BASE_URL": "http://localhost:11434",
   "MODEL_NAME": "qwen3.5:9b",
+  "AVAILABLE_MODELS": [
+    "qwen3.5:9b",
+    "granite4.2:8b",
+    "ornith-1.5:9b",
+    "qwen3.5:4b"
+  ],
   "KEEP_AI_ALIVE": "5m",
-  "NUM_CTX": 8192,
+  "NUM_CTX": 16384,
+  "NUM_GPU": 58,
+  "THINK_BUDGET_LOW": 128,
+  "THINK_BUDGET_DEEP": 256,
+  "DEFAULT_THINK_MODE": "off",
   "ROLLING_BUFFER_CHAR_LIMIT": 20000,
   "PINNED_CONTEXT_CHAR_LIMIT": 5000,
   "MAX_INNER_LOOP_TURNS": 8,
@@ -11,8 +21,8 @@
   "PUSHOVER_API_TOKEN": "",
   "PUSHOVER_EMAIL": "ax9jp7n4zw@pomail.net",
   "AI_TEMPERATURE": 0.3,
-  "VISION_MODEL_NAME": "qwen2.5vl:7b",
-  "VISION_NUM_CTX": 2048,
+  "VISION_MODEL_NAME": "qwen3.5:9b",
+  "VISION_NUM_CTX": 16384,
   "URL_DOMAIN_BLACKLIST": [
     "localhost",
     "127.0.0.1",
@@ -22,5 +32,8 @@
     "routerlogin.net",
     "192.168.1.1",
     "192.168.0.1"
-  ]
+  ],
+  "WEB_USER_AGENT": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+  "TOOL_RESULT_CHAR_LIMIT": 16384,
+  "WEB_FETCH_CHAR_LIMIT": 16384
 }

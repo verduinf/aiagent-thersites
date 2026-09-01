@@ -284,6 +284,14 @@ class TestThersitesSuite(unittest.TestCase):
             self.assertIsInstance(b64_str, str)
             self.assertTrue(len(b64_str) > 100)
             
+        test_ico_path = Path("Images/Thersites_orginal_v2_128.ico")
+        if test_ico_path.exists():
+            ok_ico, msg_ico = validate_image_path(str(test_ico_path))
+            self.assertTrue(ok_ico)
+            b64_ico = encode_image_to_base64(str(test_ico_path))
+            self.assertIsInstance(b64_ico, str)
+            self.assertTrue(len(b64_ico) > 100)
+            
         # 2. Test invalid extension
         bad_ext_path = Path("sandbox/test_bad.txt")
         with open(bad_ext_path, "w") as f:
@@ -427,6 +435,20 @@ class TestThersitesSuite(unittest.TestCase):
         
         is_repeated = tool_name in READ_ONLY_TOOLS and tool_name in executed_tools
         self.assertTrue(is_repeated)
+
+    def test_19_crawler_user_agent_configured(self):
+        from config import WEB_USER_AGENT
+        from engine import WEB_USER_AGENT as ENGINE_UA
+        self.assertIn("Googlebot", WEB_USER_AGENT)
+        self.assertEqual(WEB_USER_AGENT, ENGINE_UA)
+
+    def test_20_parameterized_limits_configured(self):
+        from config import TOOL_RESULT_CHAR_LIMIT, WEB_FETCH_CHAR_LIMIT
+        from engine import TOOL_RESULT_CHAR_LIMIT as ENGINE_TOOL_LIMIT, WEB_FETCH_CHAR_LIMIT as ENGINE_FETCH_LIMIT
+        self.assertEqual(TOOL_RESULT_CHAR_LIMIT, 16384)
+        self.assertEqual(WEB_FETCH_CHAR_LIMIT, 16384)
+        self.assertEqual(TOOL_RESULT_CHAR_LIMIT, ENGINE_TOOL_LIMIT)
+        self.assertEqual(WEB_FETCH_CHAR_LIMIT, ENGINE_FETCH_LIMIT)
 
 
 if __name__ == '__main__':
