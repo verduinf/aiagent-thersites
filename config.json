@@ -17,9 +17,6 @@
   "PINNED_CONTEXT_CHAR_LIMIT": 5000,
   "MAX_INNER_LOOP_TURNS": 8,
   "VERBOSE": false,
-  "PUSHOVER_USER_KEY": "u8gwwy1q8e6f1un48d92hc4hkg4yu2",
-  "PUSHOVER_API_TOKEN": "",
-  "PUSHOVER_EMAIL": "ax9jp7n4zw@pomail.net",
   "AI_TEMPERATURE": 0.3,
   "VISION_MODEL_NAME": "qwen3.5:9b",
   "VISION_NUM_CTX": 16384,
@@ -35,5 +32,13 @@
   ],
   "WEB_USER_AGENT": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
   "TOOL_RESULT_CHAR_LIMIT": 16384,
-  "WEB_FETCH_CHAR_LIMIT": 16384
+  "WEB_FETCH_CHAR_LIMIT": 16384,
+  "SD_MODEL_DIR": "C:\\AI\\models\\Stable-Diffusion-1.5",
+  "FLUX_MODEL_DIR": "C:\\AI\\models\\FLUX.1-schnell-int4-ov",
+  "SD_DEVICE": "GPU",
+  "SD_PYTHON_PATH": "C:\\AI\\flux\\Scripts\\python.exe",
+  "SD_CACHE_DIR": "C:\\AI\\models\\Stable-Diffusion-1.5\\.cache",
+  "SD_DEFAULT_STEPS": 10,
+  "IMAGE_GEN_METADATA_RECEIPT": true,
+  "IMAGE_MAX_DIMENSION": 1024
 }

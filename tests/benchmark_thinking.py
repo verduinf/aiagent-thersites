@@ -4,7 +4,7 @@ import time
 sys.path.insert(0, ".")
 sys.stdout.reconfigure(encoding='utf-8')
 
-from engine import run_agent_inner_loop
+from core.engine import run_agent_inner_loop
 
 PROMPT = "Update the brief.txt file in the sandbox with top tech news headlines from NU.nl. If brief.txt does not exist yet, check the sandbox directory first before creating it."
 

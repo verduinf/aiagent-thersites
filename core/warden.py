@@ -277,6 +277,47 @@ def inspect_and_authorize(tool_name: str, params: Dict[str, Any]) -> Tuple[bool,
             params["filepath"] = str(p)
         return ok, msg, params
 
+    elif tool_name in ("generate_image", "create_image", "draw_image"):
+        from config import IMAGE_MAX_DIMENSION
+        prompt = params.get("prompt", params.get("description", ""))
+        if not prompt:
+            return False, "Missing required 'prompt' or 'description' parameter for image generation.", params
+
+        # Pre-execution dimension guardrails
+        for dim_name in ("width", "height"):
+            if dim_name in params and params[dim_name] is not None:
+                try:
+                    val = int(params[dim_name])
+                    if val <= 0:
+                        return False, f"Image {dim_name} must be positive, got {val}.", params
+                    if val > IMAGE_MAX_DIMENSION:
+                        return False, f"Image {dim_name} ({val}px) exceeds safe ceiling of {IMAGE_MAX_DIMENSION}px. Lower resolution to prevent VRAM overflow.", params
+                except (ValueError, TypeError):
+                    return False, f"Invalid {dim_name} parameter: must be integer.", params
+
+        # Pre-execution inference step guardrail
+        if "steps" in params and params["steps"] is not None:
+            try:
+                s = int(params["steps"])
+                if s <= 0 or s > 50:
+                    return False, f"Inference steps ({s}) outside safe envelope [1, 50].", params
+            except (ValueError, TypeError):
+                return False, "Invalid 'steps' parameter: must be integer.", params
+
+        filepath = params.get("filename") or params.get("filepath")
+        if filepath:
+            ok, msg = validate_write_path(str(filepath))
+            if not ok:
+                return False, msg, params
+            p = Path(filepath)
+            if not p.is_absolute():
+                resolved = (BASE_DIR / p).resolve() if str(p).startswith("sandbox") else (SANDBOX_DIR / p).resolve()
+            else:
+                resolved = p.resolve()
+            params = dict(params)
+            params["filename"] = str(resolved)
+        return True, "Image generation authorized by The Warden.", params
+
     elif tool_name in ("write_to_scratchpad", "none", "finish", ""):
         return True, "Authorized action.", params
         

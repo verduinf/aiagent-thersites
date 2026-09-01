@@ -1,0 +1,132 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-10 -10 905 1015" width="100%" height="auto" style="max-width: 800px; font-family: 'Inter', system-ui, sans-serif;">
+  <defs>
+    <style>
+      .blueprint-bg   { fill: #0b1329; rx: 12px; }
+      .exterior-wall  { fill: none; stroke: #38bdf8; stroke-width: 12; stroke-linejoin: round; stroke-linecap: round; }
+      .interior-wall  { fill: none; stroke: #60a5fa; stroke-width: 7; stroke-linejoin: round; stroke-linecap: round; }
+      .thick-divider  { fill: none; stroke: #38bdf8; stroke-width: 10; stroke-linejoin: round; stroke-linecap: round; }
+      .door-swing     { fill: none; stroke: rgba(148, 163, 184, 0.6); stroke-width: 2.5; stroke-dasharray: 6 4; }
+      .door-leaf      { fill: none; stroke: #93c5fd; stroke-width: 4.5; stroke-linecap: round; }
+      .room-label     { font-size: 20px; fill: #cbd5e1; font-weight: 600; text-anchor: middle; letter-spacing: 0.5px; }
+      .room-temp      { font-size: 26px; fill: #4ade80; font-weight: 700; text-anchor: middle; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5)); }
+      .closet-fill    { fill: rgba(30, 41, 59, 0.8); stroke: #475569; stroke-width: 4; }
+      .terrace-hatch  { fill: none; stroke: rgba(148, 163, 184, 0.3); stroke-width: 2; }
+      .room-zone      { fill: rgba(30, 41, 59, 0.4); transition: fill 0.3s ease; }
+      .room-zone:hover { fill: rgba(56, 189, 248, 0.15); }
+    </style>
+  </defs>
+
+  <!-- Background Blueprint Card -->
+  <rect class="blueprint-bg" x="-5" y="-5" width="895" height="1005" />
+
+  <!-- Outer Walls -->
+  <path class="exterior-wall" d="M 37.636 42.364 L 617.636 42.364 L 882.581 43.009 C 882.581 43.009 881.432 73.611 880.449 107.875 C 879.316 147.354 878.404 191.692 879.725 199.676 L 878.104 516.792 L 877.636 525.769 L 877.636 989.032 L 777.636 989.032 C 777.636 989.032 552.114 991.442 440.457 989.54 C 310.099 987.32 36.952 986.091 36.742 986.162 L 34.847 833.56 L 37.636 42.364 Z" />
+
+  <!-- Dividers & Interior Walls -->
+  <path class="thick-divider" d="M 472.651 38.915 L 472.817 337.813" />
+  <path class="interior-wall" d="M 221.379 452.846 L 467.494 451.884" />
+  <path class="interior-wall" d="M 342.417 532.445 L 341.932 453.228" transform="matrix(-1, 0, 0, -1, 0.00002344, -0.00002637)" />
+  <path class="interior-wall" d="M 340 40 C 340.334 40.334 340.175 174.115 341.991 259.516 C 343.053 309.477 342.005 341.189 340.534 338.732" />
+  <path class="interior-wall" d="M 40 340 L 340 340" />
+  <path class="interior-wall" d="M 220 340 L 220 533.746" />
+  <path class="interior-wall" d="M 41.731 826.01 L 466.139 825.701" />
+  <path class="interior-wall" d="M 43.053 537.379 L 467.461 537.071" />
+
+  <!-- Vertical Divider Walls (Hallway/Living Room & Bedroom 1/Living Room) -->
+  <path class="thick-divider" d="M 475 420 L 475 620" />
+  <path class="thick-divider" d="M 475 760 L 475 910" />
+  <path class="thick-divider" d="M 473 953 L 473 989" />
+
+  <!-- Closet -->
+  <path class="closet-fill" d="M 778.67 402.74 C 847.462 405.681 895.547 403.063 878.67 402.74 L 880 592.153 L 780 592.153 L 778.919 438.255 L 778.67 402.74 Z" />
+
+  <!-- Terrace / Balcony Hatching -->
+  <path class="terrace-hatch" d="M 47.96 851.233 L 442.273 851.233 M 47.96 891.343 L 442.273 891.343 M 47.96 931.453 L 442.273 931.453 M 47.96 971.563 L 442.273 971.563" />
+
+  <!-- Doors -->
+  <g id="door-hall-living" transform="matrix(1.204779, 0, 0, 1.204673, -60.7649, 289.8517)">
+    <line class="door-leaf" x1="445.26" y1="281.957" x2="445.26" y2="341.957"/>
+    <path class="door-swing" d="M 444.686 280 C 471.353 300 475.371 321.468 448.705 341.468"/>
+  </g>
+  <g id="door-bedroom2" transform="matrix(1, 0, 0, 1, -2.7245, 46.3167)">
+    <path class="door-leaf" d="M 340 120 C 340.583 120.583 340.192 180.192 340 180"/>
+    <path class="door-swing" d="M 340 120 Q 300 150 340 180"/>
+  </g>
+  <g id="door-bathroom">
+    <line class="door-leaf" x1="160" y1="340" x2="200" y2="340"/>
+  </g>
+  <g id="door-wc" transform="matrix(1, 0, 0, 1, 92.2959, -17.69)">
+    <path class="door-leaf" d="M 165.66 468.462 C 165.66 468.462 214.626 472.46 212.018 468.113"/>
+  </g>
+  <g id="door-terrace" transform="matrix(1, 0, 0, 1, 36.3055, -730.5267)">
+    <line class="door-leaf" x1="200" y1="1180" x2="280" y2="1180"/>
+    <path class="door-swing" d="M 200 1180 Q 240 1140 280 1180"/>
+  </g>
+  <g id="door-living-outer" transform="matrix(1, 0, 0, 1, -555.068, -533.2397)">
+    <line class="door-leaf" x1="780" y1="900" x2="780" y2="960"/>
+    <path class="door-swing" d="M 780 900 Q 820 930 780 960"/>
+  </g>
+  <g id="door-balcony-2" transform="matrix(1, 0, 0, 1, 161.416, -729.0386)">
+    <line class="door-leaf" x1="200" y1="1180" x2="280" y2="1180"/>
+    <path class="door-swing" d="M 200 1180 Q 240 1140 280 1180"/>
+  </g>
+  <g id="door-hall-kitchen" transform="matrix(1.204779, 0, 0, 1.204673, -67.1666, 3.4865)">
+    <line class="door-leaf" x1="445.26" y1="281.957" x2="445.26" y2="341.957"/>
+    <path class="door-swing" d="M 444.686 280 C 471.353 300 475.371 321.468 448.705 341.468"/>
+  </g>
+  <g id="door-living-hallway" transform="matrix(-1.143712, 0, 0, 1.204673, 982.3698, 521.7325)">
+    <line class="door-leaf" x1="445.26" y1="281.957" x2="445.26" y2="341.957"/>
+    <path class="door-swing" d="M 444.686 280 C 471.353 300 475.371 321.468 448.705 341.468"/>
+  </g>
+
+  <!-- Room Labels & Dynamic Temperature Stamps -->
+  <!-- Bedroom (Top Left) -->
+  <g class="room-group" id="room-bedroom">
+    <text class="room-label" x="190" y="155">Bedroom</text>
+    <text class="room-temp" id="temp-bedroom" x="190" y="195">--.-°C</text>
+  </g>
+
+  <!-- Hallway -->
+  <g class="room-group" id="room-hallway">
+    <text class="room-label" x="380" y="375">Hallway</text>
+    <text class="room-temp" id="temp-hallway" x="380" y="415">--.-°C</text>
+  </g>
+
+  <!-- Kitchen -->
+  <g class="room-group" id="room-kitchen">
+    <text class="room-label" x="600" y="275">Kitchen</text>
+    <text class="room-temp" id="temp-kitchen" x="600" y="315">--.-°C</text>
+  </g>
+
+  <!-- Bathroom -->
+  <g class="room-group" id="room-bathroom">
+    <text class="room-label" x="130" y="415">Bathroom</text>
+    <text class="room-temp" id="temp-bathroom" x="130" y="455">--.-°C</text>
+  </g>
+
+  <!-- WC -->
+  <g class="room-group" id="room-wc">
+    <text class="room-label" x="283" y="495">WC</text>
+  </g>
+
+  <!-- Utility Room -->
+  <g class="room-group" id="room-utility">
+    <text class="room-label" x="421" y="501">Utility</text>
+  </g>
+
+  <!-- Study (Bottom Left) -->
+  <g class="room-group" id="room-study">
+    <text class="room-label" x="238" y="685">Study</text>
+    <text class="room-temp" id="temp-study" x="238" y="730">--.-°C</text>
+  </g>
+
+  <!-- Living Room -->
+  <g class="room-group" id="room-living">
+    <text class="room-label" x="635" y="675">Living Room</text>
+    <text class="room-temp" id="temp-living" x="635" y="720">--.-°C</text>
+  </g>
+
+  <!-- Closet & Balcony -->
+  <text class="room-label" x="832" y="495" font-size="16">Closet</text>
+  <text class="room-label" x="248" y="920">Balcony</text>
+</svg>

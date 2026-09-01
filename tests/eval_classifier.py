@@ -7,7 +7,7 @@ import hashlib
 sys.path.insert(0, ".")
 sys.stdout.reconfigure(encoding='utf-8')
 
-from engine import query_ollama
+from models.ollama_client import query_ollama
 
 # Labeled Test Set (Ground Truth)
 LABELED_TEST_SET = [

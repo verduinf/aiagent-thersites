@@ -14,14 +14,20 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path("C:/Dev/aiagent-thersites").resolve()))
 
-from database import (
+from core.database import (
     init_db, create_session, get_recent_sessions, add_message,
     toggle_message_pin, get_pinned_messages, get_rolling_messages,
-    get_all_messages, add_scratch_message, cleanup_test_data, delete_message
+    get_all_messages, add_scratch_message, cleanup_test_data, delete_message,
+    save_clue, get_all_clues, delete_clue, get_clues_by_type
 )
-from warden import inspect_and_authorize, WardenViolation, validate_url, validate_write_path, validate_sql_query, enforce_single_action_rule
-from engine import extract_fuzzy_json, clean_html_to_text
-from config import SANDBOX_DIR
+from core.warden import (
+    inspect_and_authorize, WardenViolation, validate_url, validate_write_path,
+    validate_sql_query, validate_image_path, enforce_single_action_rule
+)
+from core.parsers import extract_fuzzy_json, clean_html_to_text
+from tools import execute_tool_call
+from models.vision_client import encode_image_to_base64
+from config import SANDBOX_DIR, WEB_USER_AGENT, TOOL_RESULT_CHAR_LIMIT, WEB_FETCH_CHAR_LIMIT
 
 class TestThersitesSuite(unittest.TestCase):
 
@@ -155,8 +161,7 @@ class TestThersitesSuite(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("missing", msg.lower())
         
-        # 2. Test Engine execution with mocked network request
-        from engine import execute_tool_call
+        # 2. Test execution with mocked network request
         res = execute_tool_call({
             "id": "act_1",
             "tool": "send_message",
@@ -191,8 +196,7 @@ class TestThersitesSuite(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("blocked", msg.lower())
 
-        # 2. Test Engine execution with mocked download
-        from engine import execute_tool_call
+        # 2. Test execution with mocked download
         res = execute_tool_call({
             "id": "act_1",
             "tool": "download_image",
@@ -230,13 +234,9 @@ class TestThersitesSuite(unittest.TestCase):
 
 
     def test_11_paycheck_memory_capsule_and_co_action(self):
-        import database
-        from warden import enforce_single_action_rule, inspect_and_authorize
-        from engine import execute_tool_call
-        
         # 1. Test database save_clue, get_all_clues, delete_clue
-        database.save_clue("test_coffee", "espresso with cream")
-        clues = database.get_all_clues()
+        save_clue("test_coffee", "espresso with cream")
+        clues = get_all_clues()
         self.assertTrue(any(c["key"] == "test_coffee" and c["value"] == "espresso with cream" for c in clues))
         
         # 2. Test Warden authorization for remember and unremember
@@ -255,21 +255,19 @@ class TestThersitesSuite(unittest.TestCase):
         self.assertEqual(len(filtered), 2)
         self.assertIsNone(notice)  # Zero warning/deferral for memory co-action!
         
-        # 4. Test engine execution
+        # 4. Test tool execution
         res = execute_tool_call({"id": "act_mem", "tool": "remember", "params": {"key": "study_note", "clue": "turn off heater at night"}})
         self.assertEqual(res["status"], "success")
         self.assertIn("Clue saved", res["result"])
         
         # Cleanup
-        database.delete_clue("test_coffee")
-        database.delete_clue("study_temp")
-        database.delete_clue("study_note")
+        delete_clue("test_coffee")
+        delete_clue("study_temp")
+        delete_clue("study_note")
 
 
 
     def test_12_gorgons_gaze_image_validation_and_encoding(self):
-        from warden import validate_image_path, inspect_and_authorize
-        from engine import encode_image_to_base64
         import tempfile
         
         # 1. Test validate_image_path on existing image
@@ -315,28 +313,25 @@ class TestThersitesSuite(unittest.TestCase):
 
 
     def test_13_typed_memory_and_list_favorites(self):
-        import database
-        from engine import execute_tool_call
-        
         # 1. Test database save_clue with type='memory' vs type='url_fav'
-        database.save_clue("cat_name", "Guus", entry_type="memory")
-        database.save_clue("utrecht", "https://www.duic.nl/rss/", entry_type="url_fav")
+        save_clue("cat_name", "Guus", entry_type="memory")
+        save_clue("utrecht", "https://www.duic.nl/rss/", entry_type="url_fav")
         
-        memories = database.get_clues_by_type("memory")
+        memories = get_clues_by_type("memory")
         self.assertTrue(any(c["key"] == "cat_name" and c["value"] == "Guus" for c in memories))
         
-        favs = database.get_clues_by_type("url_fav")
+        favs = get_clues_by_type("url_fav")
         self.assertTrue(any(f["key"] == "utrecht" and "duic.nl" in f["value"] for f in favs))
         
-        # 2. Test engine execute_tool_call for list_internet_fav
+        # 2. Test execute_tool_call for list_internet_fav
         res = execute_tool_call({"id": "act_list_fav", "tool": "list_internet_fav", "params": {}})
         self.assertEqual(res["status"], "success")
         self.assertIn("utrecht", res["result"])
         
-        # Cleanup
+        delete_clue("cat_name")
+        delete_clue("utrecht")
+
     def test_14_web_fetch_direct_image_interceptor(self):
-        from engine import execute_tool_call
-        
         # Test direct .jpg URL interception in web_fetch
         res = execute_tool_call({
             "id": "act_wf_img",
@@ -348,8 +343,6 @@ class TestThersitesSuite(unittest.TestCase):
         self.assertNotIn("JFIF", res["result"])
 
     def test_15_identify_image_url_and_relative_path(self):
-        from warden import validate_image_path, inspect_and_authorize
-        
         # 1. Test direct image URL authorization
         ok_url, msg_url = validate_image_path("https://m.media-amazon.com/images/M/test.jpg")
         self.assertTrue(ok_url)
@@ -398,8 +391,6 @@ class TestThersitesSuite(unittest.TestCase):
         self.assertIn("Saved to sandbox/photo.jpg", llm_messages[3]["content"])
 
     def test_17_structured_rss_feed_extraction(self):
-        from engine import clean_html_to_text
-        
         sample_rss = """<?xml version="1.0" encoding="utf-8"?>
         <rss version="2.0">
             <channel>
@@ -437,18 +428,11 @@ class TestThersitesSuite(unittest.TestCase):
         self.assertTrue(is_repeated)
 
     def test_19_crawler_user_agent_configured(self):
-        from config import WEB_USER_AGENT
-        from engine import WEB_USER_AGENT as ENGINE_UA
         self.assertIn("Googlebot", WEB_USER_AGENT)
-        self.assertEqual(WEB_USER_AGENT, ENGINE_UA)
 
     def test_20_parameterized_limits_configured(self):
-        from config import TOOL_RESULT_CHAR_LIMIT, WEB_FETCH_CHAR_LIMIT
-        from engine import TOOL_RESULT_CHAR_LIMIT as ENGINE_TOOL_LIMIT, WEB_FETCH_CHAR_LIMIT as ENGINE_FETCH_LIMIT
         self.assertEqual(TOOL_RESULT_CHAR_LIMIT, 16384)
         self.assertEqual(WEB_FETCH_CHAR_LIMIT, 16384)
-        self.assertEqual(TOOL_RESULT_CHAR_LIMIT, ENGINE_TOOL_LIMIT)
-        self.assertEqual(WEB_FETCH_CHAR_LIMIT, ENGINE_FETCH_LIMIT)
 
     def test_21_clean_html_with_base_url_resolution(self):
         html = '<main><a href="/nieuws/12345">Belangrijk artikel over energie</a><img src="/images/foto.jpg" alt="Foto"></main>'
@@ -461,6 +445,79 @@ class TestThersitesSuite(unittest.TestCase):
         self.assertTrue(ok)
         self.assertTrue(Path(params["filepath"]).is_absolute())
         self.assertIn("sandbox", params["filepath"].lower())
+
+    def test_23_generate_image_tool_and_warden_authorization(self):
+        # 1. Test missing prompt is rejected
+        ok_no_prompt, msg_no_prompt, _ = inspect_and_authorize("generate_image", {})
+        self.assertFalse(ok_no_prompt)
+        self.assertIn("Missing required 'prompt'", msg_no_prompt)
+
+        # 2. Test valid prompt is authorized
+        ok_valid, msg_valid, params_valid = inspect_and_authorize("generate_image", {
+            "prompt": "a portrait of an ancient philosopher",
+            "filename": "sandbox/greek_philosopher.png"
+        })
+        self.assertTrue(ok_valid)
+        self.assertIn("authorized", msg_valid.lower())
+        self.assertTrue(Path(params_valid["filename"]).is_absolute())
+
+        # 3. Test path outside sandbox is rejected
+        ok_bad_path, msg_bad_path, _ = inspect_and_authorize("generate_image", {
+            "prompt": "a hacked file",
+            "filename": "C:/Windows/System32/hacked.png"
+        })
+        self.assertFalse(ok_bad_path)
+        self.assertIn("sandbox violation", msg_bad_path.lower())
+
+        # 4. Test oversized dimensions rejected pre-execution
+        ok_bad_dim, msg_bad_dim, _ = inspect_and_authorize("generate_image", {
+            "prompt": "huge canvas",
+            "width": 4096,
+            "height": 4096
+        })
+        self.assertFalse(ok_bad_dim)
+        self.assertIn("exceeds safe ceiling", msg_bad_dim.lower())
+
+        # 5. Test excessive inference steps rejected pre-execution
+        ok_bad_steps, msg_bad_steps, _ = inspect_and_authorize("generate_image", {
+            "prompt": "endless steps",
+            "steps": 999
+        })
+        self.assertFalse(ok_bad_steps)
+        self.assertIn("outside safe envelope", msg_bad_steps.lower())
+
+        # 4. Test tool execution dispatcher
+        res = execute_tool_call({
+            "id": "act_gen_1",
+            "tool": "generate_image",
+            "params": {"prompt": "a beautiful mountain sunset", "filename": "sandbox/sunset.png"}
+        })
+        self.assertEqual(res["status"], "success")
+        self.assertIn("Successfully generated", res["result"])
+        self.assertIn("sunset.png", res["url"])
+        self.assertIn("metadata_path", res)
+
+    def test_24_climate_and_heatmap_tool_separation(self):
+        # 1. Test get_room_temperatures returns pure telemetry
+        res_temp = execute_tool_call({
+            "id": "act_temp_1",
+            "tool": "get_room_temperatures",
+            "params": {}
+        })
+        self.assertEqual(res_temp["status"], "success")
+        self.assertIn("rooms", res_temp)
+
+        # 2. Test get_heatmap generates floorplan_live.svg
+        res_map = execute_tool_call({
+            "id": "act_map_1",
+            "tool": "get_heatmap",
+            "params": {}
+        })
+        self.assertEqual(res_map["status"], "success")
+        self.assertIn("floorplan_live.svg", res_map["url"])
+        self.assertIn("![Live Heatmap](/sandbox/floorplan_live.svg)", res_map["markdown"])
+        live_path = Path("sandbox/floorplan_live.svg")
+        self.assertTrue(live_path.exists())
 
 
 if __name__ == '__main__':

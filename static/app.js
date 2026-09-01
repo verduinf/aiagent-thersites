@@ -108,6 +108,213 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
+    function escapeHtml(str) {
+        if (!str) return "";
+        return String(str)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+    function formatMarkdownAndMermaid(text) {
+        if (!text) return "";
+
+        // 1. Preserve Mermaid blocks
+        const mermaidBlocks = [];
+        let processed = text.replace(/```mermaid\s*([\s\S]*?)```/gi, (match, code) => {
+            const placeholder = `__MERMAID_PLACEHOLDER_${mermaidBlocks.length}__`;
+            mermaidBlocks.push(code.trim());
+            return placeholder;
+        });
+
+        // 2. Preserve SVG vector graphics (both ```svg <svg>...</svg> ``` and inline <svg>...</svg>)
+        const svgBlocks = [];
+        processed = processed.replace(/```(?:svg|xml)?\s*(<svg[\s\S]*?<\/svg>)\s*```/gi, (match, svgCode) => {
+            const placeholder = `__SVG_PLACEHOLDER_${svgBlocks.length}__`;
+            svgBlocks.push(svgCode.trim());
+            return placeholder;
+        });
+        processed = processed.replace(/(<svg[\s\S]*?<\/svg>)/gi, (match, svgCode) => {
+            const placeholder = `__SVG_PLACEHOLDER_${svgBlocks.length}__`;
+            svgBlocks.push(svgCode.trim());
+            return placeholder;
+        });
+
+        // 3. Preserve other code blocks
+        const codeBlocks = [];
+        processed = processed.replace(/```([a-zA-Z0-9_-]*)\s*([\s\S]*?)```/g, (match, lang, code) => {
+            const placeholder = `__CODE_PLACEHOLDER_${codeBlocks.length}__`;
+            codeBlocks.push({ lang: lang || 'plaintext', code: escapeHtml(code.trim()) });
+            return placeholder;
+        });
+
+        // 4. Escape HTML for standard text
+        processed = escapeHtml(processed);
+
+        // 5. Markdown images: ![alt](url)
+        processed = processed.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (match, alt, url) => {
+            return `<div class="chat-image-card" style="margin: 8px 0;"><img src="${url}" alt="${alt}" class="rendered-chat-img" style="max-width: 100%; max-height: 420px; border-radius: 8px; border: 1px solid var(--border-color); display: block;"><span class="chat-img-caption" style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">${alt || 'Generated Image'}</span></div>`;
+        });
+
+        // 6. Markdown links: [text](url)
+        processed = processed.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match, label, url) => {
+            return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="chat-link" style="color: #60a5fa; text-decoration: underline;">${label}</a>`;
+        });
+
+        // 7. Bold & inline code
+        processed = processed.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+        processed = processed.replace(/`([^`]+)`/g, '<code class="inline-code" style="background: rgba(255,255,255,0.08); padding: 2px 5px; border-radius: 4px; font-family: var(--font-mono); font-size: 0.85em;">$1</code>');
+
+        // 8. Convert linebreaks
+        processed = processed.replace(/\n/g, '<br>');
+
+        // 9. Restore code blocks
+        codeBlocks.forEach((cb, idx) => {
+            const blockHtml = `<pre class="code-block" style="background: #0f172a; padding: 10px 14px; border-radius: 6px; overflow-x: auto; border: 1px solid rgba(255,255,255,0.1); margin: 8px 0;"><code class="language-${cb.lang}" style="font-family: var(--font-mono); font-size: 0.82rem; color: #38bdf8;">${cb.code}</code></pre>`;
+            processed = processed.replace(`__CODE_PLACEHOLDER_${idx}__`, blockHtml);
+        });
+
+        // 10. Restore Mermaid blocks
+        mermaidBlocks.forEach((code, idx) => {
+            const uniqueId = `mermaid-graph-${Date.now()}-${idx}`;
+            const mermaidHtml = `<div class="mermaid-card" style="background: #0f172a; padding: 14px; border-radius: 8px; margin: 10px 0; border: 1px solid rgba(96, 165, 250, 0.3); overflow-x: auto;"><div class="mermaid" id="${uniqueId}">${code}</div></div>`;
+            processed = processed.replace(`__MERMAID_PLACEHOLDER_${idx}__`, mermaidHtml);
+        });
+
+        // 11. Restore interactive SVG vector cards
+        svgBlocks.forEach((svgCode, idx) => {
+            const svgHtml = `<div class="interactive-svg-card" style="background: #0f172a; padding: 14px; border-radius: 8px; margin: 10px 0; border: 1px solid rgba(56, 189, 248, 0.3); overflow-x: auto; display: flex; justify-content: center; align-items: center;">${svgCode}</div>`;
+            processed = processed.replace(`__SVG_PLACEHOLDER_${idx}__`, svgHtml);
+        });
+
+        return processed;
+    }
+
+    function triggerMermaid() {
+        if (window.mermaid) {
+            try {
+                setTimeout(() => {
+                    mermaid.run({
+                        nodes: document.querySelectorAll(".mermaid:not([data-processed='true'])")
+                    });
+                }, 50);
+            } catch (e) {
+                console.warn("Mermaid render error:", e);
+            }
+        }
+    }
+
+    const voiceSelect = document.getElementById("voiceSelect");
+
+    function populateVoiceList() {
+        if (!voiceSelect || !('speechSynthesis' in window)) return;
+        const voices = window.speechSynthesis.getVoices();
+        if (!voices || voices.length === 0) return;
+
+        const currentSaved = localStorage.getItem("thersites_tts_voice");
+        voiceSelect.innerHTML = "";
+
+        // Sort voices: English and Dutch first
+        const sorted = [...voices].sort((a, b) => {
+            const aPri = a.lang.startsWith("en") ? 1 : (a.lang.startsWith("nl") ? 2 : 3);
+            const bPri = b.lang.startsWith("en") ? 1 : (b.lang.startsWith("nl") ? 2 : 3);
+            if (aPri !== bPri) return aPri - bPri;
+            return a.name.localeCompare(b.name);
+        });
+
+        sorted.forEach(v => {
+            const opt = document.createElement("option");
+            opt.value = v.name;
+            opt.textContent = `${v.name} (${v.lang})`;
+            if (currentSaved && currentSaved === v.name) {
+                opt.selected = true;
+            } else if (!currentSaved && !voiceSelect.value && v.lang.startsWith("en") && (v.name.includes("Natural") || v.name.includes("Google") || v.name.includes("Online"))) {
+                opt.selected = true;
+            }
+            voiceSelect.appendChild(opt);
+        });
+    }
+
+    if ('speechSynthesis' in window) {
+        populateVoiceList();
+        if (window.speechSynthesis.onvoiceschanged !== undefined) {
+            window.speechSynthesis.onvoiceschanged = populateVoiceList;
+        }
+        if (voiceSelect) {
+            voiceSelect.addEventListener("change", () => {
+                localStorage.setItem("thersites_tts_voice", voiceSelect.value);
+            });
+        }
+    }
+
+    let currentlySpeakingMsgId = null;
+
+    function cleanTextForSpeech(rawText) {
+        if (!rawText) return "";
+        return rawText
+            .replace(/```mermaid[\s\S]*?```/gi, " [flowchart diagram omitted] ")
+            .replace(/```[\s\S]*?```/g, " [code snippet omitted] ")
+            .replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1")
+            .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+            .replace(/`([^`]+)`/g, "$1")
+            .replace(/[*_#~>]/g, "")
+            .replace(/\s+/g, " ")
+            .trim();
+    }
+
+    function handleSpeakMessage(msgId, rawText, btnElement) {
+        if (!('speechSynthesis' in window)) {
+            alert("Speech synthesis is not supported in this browser.");
+            return;
+        }
+
+        // Toggle off if currently speaking this message
+        if (window.speechSynthesis.speaking && currentlySpeakingMsgId === msgId) {
+            window.speechSynthesis.cancel();
+            currentlySpeakingMsgId = null;
+            if (btnElement) btnElement.innerHTML = "&#128266;";
+            return;
+        }
+
+        // Cancel any existing speech
+        window.speechSynthesis.cancel();
+        document.querySelectorAll(".speak-btn").forEach(b => b.innerHTML = "&#128266;");
+
+        const clean = cleanTextForSpeech(rawText);
+        if (!clean) return;
+
+        const utterance = new SpeechSynthesisUtterance(clean);
+        utterance.rate = 1.0;
+        utterance.pitch = 1.0;
+
+        const voices = window.speechSynthesis.getVoices();
+        if (voices && voices.length > 0) {
+            const chosenName = (voiceSelect && voiceSelect.value) || localStorage.getItem("thersites_tts_voice");
+            let chosenVoice = voices.find(v => v.name === chosenName);
+            if (!chosenVoice) {
+                chosenVoice = voices.find(v => v.lang.startsWith("en") && (v.name.includes("Natural") || v.name.includes("Google") || v.name.includes("Online"))) || voices.find(v => v.lang.startsWith("en"));
+            }
+            if (chosenVoice) utterance.voice = chosenVoice;
+        }
+
+        currentlySpeakingMsgId = msgId;
+        if (btnElement) btnElement.innerHTML = "&#9209;&#65039;"; // Stop icon
+
+        utterance.onend = () => {
+            currentlySpeakingMsgId = null;
+            if (btnElement) btnElement.innerHTML = "&#128266;";
+        };
+
+        utterance.onerror = () => {
+            currentlySpeakingMsgId = null;
+            if (btnElement) btnElement.innerHTML = "&#128266;";
+        };
+
+        window.speechSynthesis.speak(utterance);
+    }
+
     async function loadMessages(sessionId) {
         if (!sessionId) return;
         try {
@@ -144,7 +351,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         <span>&#10005;</span> Unpin
                     </button>
                 </div>
-                <div class="message-body" style="font-size: 0.8rem; line-height: 1.35; color: #e6edf3;">${escapeHtml(m.content)}</div>
+                <div class="message-body" style="font-size: 0.8rem; line-height: 1.35; color: #e6edf3;">${formatMarkdownAndMermaid(m.content)}</div>
             `;
             pinnedContainer.appendChild(card);
         });
@@ -198,6 +405,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 rollingCharCount += m.content.length;
             }
 
+            const speakBtnHtml = `<button class="speak-btn" data-msg-id="${m.id}" title="Read aloud">&#128266;</button>`;
+
             card.innerHTML = `
                 <div class="message-header">
                     <div class="message-author">
@@ -208,11 +417,12 @@ document.addEventListener("DOMContentLoaded", () => {
                     <div class="message-actions">
                         <span class="seq-badge">Msg #${m.sequence_id}</span>
                         <span class="message-time">${m.created_at || ''}</span>
+                        ${speakBtnHtml}
                         <button class="pin-btn ${pinClass}" data-msg-id="${m.id}" title="Toggle Pin">&#128205;</button>
                         <button class="delete-btn" data-msg-id="${m.id}" title="Delete Message">&#128465;</button>
                     </div>
                 </div>
-                <div class="message-body">${escapeHtml(m.content)}</div>
+                <div class="message-body">${formatMarkdownAndMermaid(m.content)}</div>
             `;
 
             timelineContainer.appendChild(card);
@@ -222,6 +432,18 @@ document.addEventListener("DOMContentLoaded", () => {
         pinnedBadge.textContent = `Pinned: ${pinnedCharCount.toLocaleString()} / 5k`;
 
         renderPinnedSidebar(pinnedMessages);
+        triggerMermaid();
+
+        timelineContainer.querySelectorAll(".speak-btn").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                const msgId = btn.getAttribute("data-msg-id");
+                const msg = messages.find(item => String(item.id) === String(msgId));
+                if (msg) {
+                    handleSpeakMessage(msgId, msg.content, btn);
+                }
+            });
+        });
 
         timelineContainer.querySelectorAll(".pin-btn").forEach(btn => {
             btn.addEventListener("click", async (e) => {

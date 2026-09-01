@@ -15,12 +15,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from config import STATIC_DIR, SANDBOX_DIR, UPLOADS_DIR, MODEL_NAME, AVAILABLE_MODELS
-from database import (
+from core.database import (
     init_db, create_session, set_active_session, get_recent_sessions,
     get_or_create_active_session, add_message, toggle_message_pin,
     get_all_messages, cleanup_test_data, delete_message
 )
-from engine import run_agent_inner_loop, prewarm_ollama_model
+from core.engine import run_agent_inner_loop
+from models.ollama_client import prewarm_ollama_model
 
 def kill_existing_port_process(port: int = 8000):
     """Terminates any old orphaned process listening on the target port before starting a new server instance."""

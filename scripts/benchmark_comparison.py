@@ -22,7 +22,9 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from engine import query_ollama, query_ollama_vision, SYSTEM_CONTRACT
+from models.ollama_client import query_ollama
+from models.vision_client import query_ollama_vision
+from core.contract import SYSTEM_CONTRACT
 from config import MODEL_NAME, VISION_MODEL_NAME
 
 def run_vision_benchmark():

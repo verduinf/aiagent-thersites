@@ -32,6 +32,6 @@ This repository houses **Local Intern Thersites**: an autonomous, locally-hosted
   * **Name**: **Thersites** (strictly, never Therp)
   * **Lore**: The mortal footsoldier. Prone to stumbling, context limits, and rookie mistakes, but backed by Python guardrails and eager to learn from every retry loop.
 
-* **The Warden 🏛️ (`warden.py`)**:
+* **The Warden 🏛️ (`core/warden.py`)**:
   * **Role**: Programmatic Security & Sandbox Guardrail Overseer.
   * **Enforcement Rules**: Enforces path enclosure inside `C:\Dev\aiagent-thersites\sandbox` (Full CRUD allowed), restricts `web_fetch` strictly to `nu.nl`, and enforces read-only SQL queries on data tables with full CRUD strictly on `thersites_scratchpad`.

@@ -238,6 +238,23 @@ body {
                 font-size: 0.75rem;
             }
 
+            .speak-btn {
+                background: none;
+                border: none;
+                cursor: pointer;
+                font-size: 0.85rem;
+                opacity: 0.65;
+                transition: opacity 0.2s, transform 0.1s;
+                padding: 2px 4px;
+                border-radius: 4px;
+
+                &:hover {
+                    opacity: 1;
+                    background: rgba(255, 255, 255, 0.08);
+                    transform: scale(1.1);
+                }
+            }
+
             .pin-btn {
                 background: none;
                 border: none;
@@ -261,6 +278,33 @@ body {
         white-space: pre-wrap;
         word-break: break-word;
     }
+}
+
+/* Interactive SVG Floorplans & Gauges */
+.interactive-svg-card {
+    background-color: #0b1329;
+    border: 1px solid rgba(56, 189, 248, 0.3);
+    border-radius: 8px;
+    padding: 12px;
+    margin: 8px 0;
+    overflow-x: auto;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.interactive-svg-card svg {
+    max-width: 100%;
+    height: auto;
+    display: block;
+}
+
+.interactive-svg-card svg .room {
+    transition: all 0.25s ease;
+    cursor: pointer;
+}
+
+.interactive-svg-card svg .room:hover rect {
+    filter: brightness(1.25);
+    stroke-width: 2.5px;
 }
 
 /* Context Badges */

@@ -55,6 +55,14 @@ VISION_NUM_CTX = int(os.environ.get("VISION_NUM_CTX", config_data.get("VISION_NU
 WEB_USER_AGENT = os.environ.get("WEB_USER_AGENT", config_data.get("WEB_USER_AGENT", "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"))
 TOOL_RESULT_CHAR_LIMIT = int(os.environ.get("TOOL_RESULT_CHAR_LIMIT", config_data.get("TOOL_RESULT_CHAR_LIMIT", 16384)))
 WEB_FETCH_CHAR_LIMIT = int(os.environ.get("WEB_FETCH_CHAR_LIMIT", config_data.get("WEB_FETCH_CHAR_LIMIT", 16384)))
+SD_MODEL_DIR = Path(os.environ.get("SD_MODEL_DIR", config_data.get("SD_MODEL_DIR", r"C:\AI\models\Stable-Diffusion-1.5")))
+FLUX_MODEL_DIR = Path(os.environ.get("FLUX_MODEL_DIR", config_data.get("FLUX_MODEL_DIR", r"C:\AI\models\FLUX.1-schnell-int4-ov")))
+SD_DEVICE = os.environ.get("SD_DEVICE", config_data.get("SD_DEVICE", "GPU"))
+SD_PYTHON_PATH = Path(os.environ.get("SD_PYTHON_PATH", config_data.get("SD_PYTHON_PATH", r"C:\AI\flux\Scripts\python.exe")))
+SD_CACHE_DIR = Path(os.environ.get("SD_CACHE_DIR", config_data.get("SD_CACHE_DIR", r"C:\AI\models\Stable-Diffusion-1.5\.cache")))
+SD_DEFAULT_STEPS = int(os.environ.get("SD_DEFAULT_STEPS", config_data.get("SD_DEFAULT_STEPS", 10)))
+IMAGE_GEN_METADATA_RECEIPT = bool(os.environ.get("IMAGE_GEN_METADATA_RECEIPT", config_data.get("IMAGE_GEN_METADATA_RECEIPT", True)))
+IMAGE_MAX_DIMENSION = int(os.environ.get("IMAGE_MAX_DIMENSION", config_data.get("IMAGE_MAX_DIMENSION", 1024)))
 
 VERBOSE = "--verbose" in sys.argv or os.environ.get("VERBOSE") == "1" or config_data.get("VERBOSE", False)
 
@@ -67,7 +75,9 @@ TESTS_DIR = BASE_DIR / "tests"
 DOCS_DIR = BASE_DIR / "docs"
 SCRIPTS_DIR = BASE_DIR / "scripts"
 DATA_DIR = BASE_DIR / "data"
+TEMPLATES_DIR = BASE_DIR / "templates"
 
 os.makedirs(SANDBOX_DIR, exist_ok=True)
 os.makedirs(UPLOADS_DIR, exist_ok=True)
 os.makedirs(DATA_DIR, exist_ok=True)
+os.makedirs(TEMPLATES_DIR, exist_ok=True)
