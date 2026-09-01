@@ -6,12 +6,12 @@ import os
 import re
 import json
 import time
+import mimetypes
 import requests
 _OLLAMA_SESSION = requests.Session()
 from pathlib import Path
 from typing import Dict, Any, List, Generator, Tuple
 import urllib.parse
-import urllib.request
 import base64
 import xml.etree.ElementTree as ET
 from typing import Optional
@@ -199,7 +199,7 @@ def extract_structured_feed(raw_text: str, max_items: int = 15) -> Optional[str]
             pass
     return None
 
-def clean_html_to_text(html_content: str, max_chars: Optional[int] = None) -> str:
+def clean_html_to_text(html_content: str, max_chars: Optional[int] = None, base_url: str = "") -> str:
     """Robust HTML and RSS feed stripper prioritizing structured feed items or <main> / <article> blocks."""
     limit = max_chars if max_chars is not None else WEB_FETCH_CHAR_LIMIT
     feed_text = extract_structured_feed(html_content, max_items=15)
@@ -224,7 +224,9 @@ def clean_html_to_text(html_content: str, max_chars: Optional[int] = None) -> st
         href = match.group(1)
         anchor_text = re.sub(r'<[^>]+>', ' ', match.group(2)).strip()
         
-        if href.startswith("/"):
+        if base_url:
+            href = urllib.parse.urljoin(base_url, href)
+        elif href.startswith("/"):
             href = f"https://nu.nl{href}"
             
         lower_anchor = anchor_text.lower()
@@ -237,7 +239,9 @@ def clean_html_to_text(html_content: str, max_chars: Optional[int] = None) -> st
     
     def img_replacer(match):
         src = match.group(1)
-        if src.startswith("/"):
+        if base_url:
+            src = urllib.parse.urljoin(base_url, src)
+        elif src.startswith("/"):
             src = f"https://nu.nl{src}"
         if not src.endswith((".svg", ".gif", ".ico")) and ("media" in src or "images" in src or src.endswith((".jpg", ".png", ".webp"))):
             return f" [IMAGE: {src}] "
@@ -249,7 +253,7 @@ def clean_html_to_text(html_content: str, max_chars: Optional[int] = None) -> st
     text = re.sub(r'\s+', ' ', text).strip()
     if not text:
         return "[PAGE CONTENT]: No direct textual body extracted (page may require JavaScript rendering). Try fetching category feeds like https://www.nu.nl/rss/Algemeen or https://www.nu.nl/rss/Binnenland."
-    return text[:max_chars]
+    return text[:limit]
 
 def prewarm_ollama_model(think_mode: bool = False) -> bool:
     """Pre-loads model into VRAM on startup using empty messages array (2s)."""
@@ -268,7 +272,7 @@ def prewarm_ollama_model(think_mode: bool = False) -> bool:
     try:
         log_main(f"Pre-warming model '{MODEL_NAME}' in VRAM (keep_alive: {KEEP_AI_ALIVE}, num_ctx: 4096)...", INDICATOR_THINKING)
         start_t = time.time()
-        resp = requests.post(native_url, json=payload, timeout=60)
+        resp = _OLLAMA_SESSION.post(native_url, json=payload, timeout=60)
         elapsed = round(time.time() - start_t, 2)
         if resp.status_code == 200:
             log_main(f"Model '{MODEL_NAME}' pre-warmed into VRAM in {elapsed}s!", INDICATOR_DONE)
@@ -427,7 +431,7 @@ def query_ollama(messages: List[Dict[str, str]], model: str = MODEL_NAME, think_
     }
     
     try:
-        response = requests.post(native_url, headers=headers, json=payload, timeout=300)
+        response = _OLLAMA_SESSION.post(native_url, headers=headers, json=payload, timeout=300)
         wall_time = time.time() - start_t
         if response.status_code == 200:
             data = response.json()
@@ -481,7 +485,6 @@ def dispatch_pushover_notification(message: str, title: str = "Thersites Agent",
     }
     
     files = None
-    file_handle = None
     if image_path:
         if isinstance(image_path, str) and image_path.startswith(("http://", "https://")):
             try:
@@ -506,17 +509,14 @@ def dispatch_pushover_notification(message: str, title: str = "Thersites Agent",
             resolved_img = None
             
         if resolved_img and resolved_img.exists() and resolved_img.is_file():
-            file_handle = open(resolved_img, "rb")
-            files = {"attachment": (resolved_img.name, file_handle, "image/png")}
+            mime_type = mimetypes.guess_type(resolved_img.name)[0] or "image/jpeg"
+            files = {"attachment": (resolved_img.name, resolved_img.read_bytes(), mime_type)}
         else:
             log_subagent("Pushover", f"Image file '{image_path}' not found on disk. Sending text alert.", INDICATOR_THINKING)
             
     try:
         log_subagent("Pushover", f"Pushing alert '{title}' to The Boss's device...", INDICATOR_THINKING)
         resp = requests.post("https://api.pushover.net/1/messages.json", data=payload, files=files, timeout=15)
-        if file_handle:
-            file_handle.close()
-            
         if resp.status_code == 200:
             success_msg = "Successfully dispatched Pushover alert to The Boss's phone."
             log_subagent("Pushover", success_msg, INDICATOR_DONE)
@@ -526,8 +526,6 @@ def dispatch_pushover_notification(message: str, title: str = "Thersites Agent",
             log_subagent("Pushover", fail_msg, INDICATOR_BLOCKED)
             return False, fail_msg
     except Exception as e:
-        if file_handle:
-            file_handle.close()
         err_msg = f"Failed to dispatch Pushover alert: {str(e)}"
         log_subagent("Pushover", err_msg, INDICATOR_BLOCKED)
         return False, err_msg
@@ -573,7 +571,7 @@ def execute_tool_call(action: Dict[str, Any], active_model: Optional[str] = None
                 url = "https://www.nu.nl/rss/weerbericht"
             elif normalized_url in ("https://www.nu.nl/tech", "https://nu.nl/tech"):
                 url = "https://www.nu.nl/rss/Tech"
-            elif normalized_url in ("https://www.nu.nl/algemeen", "https://nu.nl/algemeen", "https://www.nu.nl", "https://nu.nl"):
+            elif normalized_url in ("https://www.nu.nl/algemeen", "https://nu.nl/algemeen", "https://nu.nl", "https://nu.nl"):
                 url = "https://www.nu.nl/rss/Algemeen"
             elif normalized_url in ("https://www.duic.nl", "https://duic.nl", "https://www.duic.nl/feed", "https://duic.nl/feed"):
                 url = "https://www.duic.nl/rss/"
@@ -589,7 +587,7 @@ def execute_tool_call(action: Dict[str, Any], active_model: Optional[str] = None
                     "result": f"[DIRECT IMAGE CONTENT DETECTED]: '{url}' returned an image ({content_type}). Use 'download_image' or 'identify_image' to inspect this image."
                 }
             raw_html = resp.text
-            clean_text = clean_html_to_text(raw_html, max_chars=WEB_FETCH_CHAR_LIMIT)
+            clean_text = clean_html_to_text(raw_html, max_chars=WEB_FETCH_CHAR_LIMIT, base_url=url)
             log_subagent("Web Fetcher", f"Extracted {len(clean_text)} chars of text with article URLs in 0.01s", INDICATOR_DONE)
             return {"id": action_id, "tool": tool_name, "status": "success", "result": clean_text}
             
@@ -620,13 +618,6 @@ def execute_tool_call(action: Dict[str, Any], active_model: Optional[str] = None
                         "result": f"Failed to download image from '{url}': HTTP {resp.status_code}"
                     }
                     
-            p = Path(filepath).resolve()
-            if not p.exists():
-                if (SANDBOX_DIR / Path(filepath).name).exists():
-                    filepath = str((SANDBOX_DIR / Path(filepath).name).resolve())
-                elif (SANDBOX_DIR / filepath).exists():
-                    filepath = str((SANDBOX_DIR / filepath).resolve())
-                    
             effective_vis_model = active_model or VISION_MODEL_NAME
             log_subagent("Vision Inspection", f"Inspecting visual asset '{Path(filepath).name}' with {effective_vis_model}...", INDICATOR_THINKING)
             description, v_perf = query_ollama_vision(filepath, prompt, model=effective_vis_model)
@@ -641,12 +632,6 @@ def execute_tool_call(action: Dict[str, Any], active_model: Optional[str] = None
         elif tool_name == "download_image":
             url = sanitized_params["url"]
             filepath = sanitized_params["filepath"]
-            p = Path(filepath)
-            if not p.is_absolute():
-                if not str(p).startswith("sandbox"):
-                    filepath = str(SANDBOX_DIR / p.name)
-                else:
-                    filepath = str((SANDBOX_DIR / p.name).resolve())
             log_subagent("Image Downloader", f"Fetching image '{url}'...", INDICATOR_THINKING)
             resp = requests.get(url, headers={"User-Agent": WEB_USER_AGENT}, timeout=15)
             if resp.status_code == 200:
@@ -787,10 +772,10 @@ def run_agent_inner_loop(session_id: str, user_prompt: str, image_path: Optional
 
         sys_content = f"{SYSTEM_CONTRACT}\n\n{telemetry_tag}"
         if clues_text:
-            sys_content += f"\n\n--- ?? PAYCHECK CAPSULE (Clues from your Past Self) ---\n{clues_text}\n(These are persistent notes your past self saved into SQLite. You ALREADY HAVE these clues in front of you?no need to query SQLite!)"
+            sys_content += f"\n\n--- 📜 PAYCHECK CAPSULE (Clues from your Past Self) ---\n{clues_text}\n(These are persistent notes your past self saved into SQLite. You ALREADY HAVE these clues in front of you — no need to query SQLite!)"
             
         if pinned_text:
-            sys_content += f"\n\n--- ?? PINNED CONTEXT ANCHORS (Active UI Pins from The Boss) ---\n{pinned_text}\n(These are the exact messages The Boss pinned in the UI for your reference.)"
+            sys_content += f"\n\n--- 📌 PINNED CONTEXT ANCHORS (Active UI Pins from The Boss) ---\n{pinned_text}\n(These are the exact messages The Boss pinned in the UI for your reference.)"
             
         llm_messages = [{"role": "system", "content": sys_content}]
         
@@ -950,7 +935,5 @@ def run_agent_inner_loop(session_id: str, user_prompt: str, image_path: Optional
             "type": "final_response",
             "message": {"id": -1, "sequence_id": -1, "role": "assistant", "content": final_response, "created_at": "now"}
         }
-        
-    return final_response
         
     return final_response

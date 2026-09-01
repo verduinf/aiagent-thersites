@@ -109,8 +109,16 @@ def validate_write_path(filepath: str) -> Tuple[bool, str]:
         return False, "Invalid or missing filepath parameter."
         
     try:
-        resolved = Path(filepath).resolve()
+        p = Path(filepath)
         sandbox_resolved = SANDBOX_DIR.resolve()
+        
+        if not p.is_absolute():
+            if str(p).startswith("sandbox"):
+                resolved = (BASE_DIR / p).resolve()
+            else:
+                resolved = (SANDBOX_DIR / p).resolve()
+        else:
+            resolved = p.resolve()
         
         if resolved.exists() and resolved.is_dir():
             return False, f"Target path '{filepath}' is a directory. Please specify a file name inside the sandbox (e.g., '{filepath}/bus_story.txt')."
@@ -193,11 +201,26 @@ def inspect_and_authorize(tool_name: str, params: Dict[str, Any]) -> Tuple[bool,
         path_ok, path_msg = validate_write_path(filepath)
         if not path_ok:
             return False, path_msg, params
+        p = Path(filepath)
+        if not p.is_absolute():
+            resolved = (BASE_DIR / p).resolve() if str(p).startswith("sandbox") else (SANDBOX_DIR / p).resolve()
+        else:
+            resolved = p.resolve()
+        params = dict(params)
+        params["filepath"] = str(resolved)
         return True, "Image download authorized by The Warden.", params
         
     elif tool_name in ("write_to_file", "read_file", "delete_file"):
         filepath = params.get("filepath", "")
         ok, msg = validate_write_path(filepath)
+        if ok:
+            p = Path(filepath)
+            if not p.is_absolute():
+                resolved = (BASE_DIR / p).resolve() if str(p).startswith("sandbox") else (SANDBOX_DIR / p).resolve()
+            else:
+                resolved = p.resolve()
+            params = dict(params)
+            params["filepath"] = str(resolved)
         return ok, msg, params
         
     elif tool_name == "list_sandbox":
@@ -243,6 +266,15 @@ def inspect_and_authorize(tool_name: str, params: Dict[str, Any]) -> Tuple[bool,
     elif tool_name in ("identify_image", "inspect_image", "gorgons_gaze", "analyze_image"):
         filepath = params.get("filepath", params.get("image_path", params.get("path", params.get("url", ""))))
         ok, msg = validate_image_path(filepath)
+        if ok and not str(filepath).startswith(("http://", "https://")):
+            p = Path(filepath).resolve()
+            if not p.exists():
+                if (SANDBOX_DIR / Path(filepath).name).exists():
+                    p = (SANDBOX_DIR / Path(filepath).name).resolve()
+                elif (SANDBOX_DIR / filepath).exists():
+                    p = (SANDBOX_DIR / filepath).resolve()
+            params = dict(params)
+            params["filepath"] = str(p)
         return ok, msg, params
 
     elif tool_name in ("write_to_scratchpad", "none", "finish", ""):

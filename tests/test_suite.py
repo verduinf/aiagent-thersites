@@ -450,6 +450,18 @@ class TestThersitesSuite(unittest.TestCase):
         self.assertEqual(TOOL_RESULT_CHAR_LIMIT, ENGINE_TOOL_LIMIT)
         self.assertEqual(WEB_FETCH_CHAR_LIMIT, ENGINE_FETCH_LIMIT)
 
+    def test_21_clean_html_with_base_url_resolution(self):
+        html = '<main><a href="/nieuws/12345">Belangrijk artikel over energie</a><img src="/images/foto.jpg" alt="Foto"></main>'
+        parsed = clean_html_to_text(html, base_url="https://www.duic.nl")
+        self.assertIn("https://www.duic.nl/nieuws/12345", parsed)
+        self.assertIn("https://www.duic.nl/images/foto.jpg", parsed)
+
+    def test_22_warden_canonicalizes_filepaths(self):
+        ok, msg, params = inspect_and_authorize("write_to_file", {"filepath": "sandbox/story.txt"})
+        self.assertTrue(ok)
+        self.assertTrue(Path(params["filepath"]).is_absolute())
+        self.assertIn("sandbox", params["filepath"].lower())
+
 
 if __name__ == '__main__':
     unittest.main()
