@@ -54,6 +54,10 @@ def get_db_connection():
 #### 4. HTML5 Entity & Asset Robustness (`static/`)
 - **Observation**: URL query string parameters (`?v=12`) and UTF-8 charset declarations are now strictly compliant. The lower-left portrait docking and CSS flex layout render cleanly without DOM overlaps.
 
+#### 5. Stale Skill Script Artifact (`.agents/skills/code-peer-review-and-architect/scripts/check_db.py`)
+- **Observation**: `check_db.py` currently contains legacy hardcoded queries pointing to `S:\Agile Comic Tracker\Data\comics.db` inherited from the ACT (`C:\Dev\act-tracker`) repository.
+- **Strategic Recommendation**: Clean it up and align the code: repurpose or rewrite `check_db.py` to target `data/thersites.db` and validate schema integrity across `sessions`, `messages`, and `thersites_scratchpad`.
+
 ---
 
 ## ??? Security & Warden Audit
