@@ -7,7 +7,7 @@ import re
 import time
 from pathlib import Path
 from typing import Dict, Any, Optional
-import tado_client
+from tools import tado_client
 from config import SANDBOX_DIR, TEMPLATES_DIR
 from console_logger import log_subagent, INDICATOR_THINKING, INDICATOR_DONE, INDICATOR_BLOCKED
 
